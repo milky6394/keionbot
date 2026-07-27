@@ -104,7 +104,7 @@ def register_member(req: RegisterRequest):
         print(f"Database error: {e}")
         return {"success": False, "message": "登録処理中にエラーが発生しました"}
 
-    # 4. 部員情報の更新 API
+# 4. 部員情報の更新 API
 @app.put("/api/update-member")
 def update_member(req: UpdateMemberRequest):
     username = req.username.strip()
@@ -145,3 +145,21 @@ def update_member(req: UpdateMemberRequest):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "更新処理中にエラーが発生しました"}
+
+# 5. 全部員一覧取得 API
+@app.get("/api/get-members")
+def get_members():
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 学年昇順・学籍番号昇順で並び替えて取得
+        res = supabase.table("members").select("*").order("grade").order("number").execute()
+
+        return {
+            "success": True,
+            "members": res.data
+        }
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "部員データの取得に失敗しました"}
