@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from supabase import create_client, Client
 from datetime import date
 import hashlib
 import os
+
+from config import supabase
+from schemas import LoginRequest, MemberCheckRequest, RegisterRequest
 
 app = FastAPI()
 
@@ -15,33 +16,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
-
-supabase: Client = None
-if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --- リクエストデータモデル ---
-class LoginRequest(BaseModel):
-    password: str
-
-class MemberCheckRequest(BaseModel):
-    username: str
-
-class RegisterRequest(BaseModel):
-    username: str
-    grade: int
-    member_class: str  # 3年以上は空文字 "" が入る
-    course: str        # M, E, S, C のいずれか
-    number: str
-    gender: str
-    dormitory: bool
-    room: int | None = None  # 自宅生の場合は None (null)
-    single: bool
-    line: str
-    multi: str
 
 
 # 1. 共通パスワード認証
@@ -92,7 +66,7 @@ def check_member(req: MemberCheckRequest):
         return {"success": False, "message": "データベース処理エラー"}
 
 
-# 3. 新規部員アカウント登録（Supabaseへ保存）
+# 3. 新規部員アカウント登録
 @app.post("/api/register-member")
 def register_member(req: RegisterRequest):
     if not req.username.strip():
@@ -102,7 +76,6 @@ def register_member(req: RegisterRequest):
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # Supabaseのテーブル定義に合わせた辞書を作成
         new_data = {
             "username": req.username.strip(),
             "grade": req.grade,
@@ -115,13 +88,16 @@ def register_member(req: RegisterRequest):
             "single": req.single,
             "line": req.line.strip(),
             "multi": req.multi.strip(),
-            "update": date.today().isoformat()  # 今日の日付 (YYYY-MM-DD)
+            "update": date.today().isoformat()
         }
         
-        supabase.table("members").insert(new_data).execute()
+        # 登録実行＆登録したデータを取得
+        res = supabase.table("members").insert(new_data).execute()
+        created_user = res.data[0] if res.data else new_data
 
         return {
             "success": True,
+            "user_data": created_user,
             "message": f"ようこそ！{req.username}さんの部員登録が完了しました。"
         }
     except Exception as e:
