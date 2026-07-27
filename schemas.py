@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List
 
 class LoginRequest(BaseModel):
     password: str
@@ -35,3 +36,11 @@ class UpdateMemberRequest(BaseModel):
 class DeleteAccountRequest(BaseModel):
     username: str
     password: str
+
+class BandMemberItem(BaseModel):
+    username: str
+    part: str
+
+class BandRegisterRequest(BaseModel):
+    band_name: str
+    members: List[BandMemberItem]

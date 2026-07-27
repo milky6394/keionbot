@@ -251,3 +251,52 @@ def delete_account(req: DeleteAccountRequest):
     except Exception as e:
         print(f"Database delete error: {e}")
         return {"success": False, "message": "削除処理中にエラーが発生しました"}
+
+# 7. バンド新規登録 API
+@app.post("/api/register-band")
+def register_band(req: BandRegisterRequest):
+    band_name = req.band_name.strip()
+
+    if not band_name:
+        return {"success": False, "message": "バンド名を入力してください"}
+
+    if not req.members or len(req.members) == 0:
+        return {"success": False, "message": "メンバーを1人以上追加してください"}
+
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. 重複チェック
+        existing = supabase.table("bands").select("*").eq("band_name", band_name).execute()
+        if len(existing.data) > 0:
+            return {"success": False, "message": "そのバンド名は既に登録されています"}
+
+        # 2. bands テーブルにバンドを作成
+        band_res = supabase.table("bands").insert({"band_name": band_name}).execute()
+        if not band_res.data:
+            return {"success": False, "message": "バンドの作成に失敗しました"}
+
+        created_band_id = band_res.data[0]["id"]
+
+        # 3. band_members テーブルにメンバー＆パート情報をまとめて一括登録
+        member_records = [
+            {
+                "band_id": created_band_id,
+                "username": m.username.strip(),
+                "part": m.part.strip()
+            }
+            for m in req.members if m.username.strip()
+        ]
+
+        if member_records:
+            supabase.table("band_members").insert(member_records).execute()
+
+        return {
+            "success": True,
+            "message": f"バンド「{band_name}」を登録しました！"
+        }
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "バンド登録処理中にエラーが発生しました"}
