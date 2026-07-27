@@ -33,8 +33,8 @@ class MemberCheckRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     grade: int
-    member_class: str  # Python予約語 'class' との衝突回避のため別名で受け取る
-    course: str
+    member_class: str  # 3年以上は空文字 "" が入る
+    course: str        # M, E, S, C のいずれか
     number: str
     gender: str
     dormitory: bool
@@ -42,8 +42,6 @@ class RegisterRequest(BaseModel):
     single: bool
     line: str
     multi: str
-    band: str
-    instrument: str
 
 
 # 1. 共通パスワード認証
@@ -94,7 +92,7 @@ def check_member(req: MemberCheckRequest):
         return {"success": False, "message": "データベース処理エラー"}
 
 
-# 3. 新規部員アカウント登録（全項目をSupabaseへ保存）
+# 3. 新規部員アカウント登録（Supabaseへ保存）
 @app.post("/api/register-member")
 def register_member(req: RegisterRequest):
     if not req.username.strip():
@@ -117,8 +115,6 @@ def register_member(req: RegisterRequest):
             "single": req.single,
             "line": req.line.strip(),
             "multi": req.multi.strip(),
-            "band": req.band.strip(),
-            "instrument": req.instrument.strip(),
             "update": date.today().isoformat()  # 今日の日付 (YYYY-MM-DD)
         }
         
