@@ -23,9 +23,10 @@ def check_password(input_password: str) -> bool:
     
     # 送られてきたパスワードの前後から空白・改行（\n や \r）を除去する
     clean_password = input_password.strip()
+    clean_salt = salt.strip()
     
     print(f"DEBUG - stored_hash: '{stored_hash}'")
-    print(f"DEBUG - salt: '{salt}'")
+    print(f"DEBUG - clean_salt: '{clean_salt}'")
     print(f"DEBUG - clean_password: '{clean_password}'")
     
     if not stored_hash:
@@ -33,7 +34,7 @@ def check_password(input_password: str) -> bool:
         return False
     
     # 除去後のパスワードでハッシュ化
-    hashed_input = hashlib.sha256((clean_password + salt).encode("utf-8")).hexdigest()
+    hashed_input = hashlib.sha256((clean_password + clean_salt).encode("utf-8")).hexdigest()
     print(f"DEBUG - hashed_input: '{hashed_input}'")
     
     return hashed_input == stored_hash
