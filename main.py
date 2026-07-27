@@ -18,15 +18,19 @@ class LoginRequest(BaseModel):
     password: str
 
 def check_password(input_password: str) -> bool:
-    # Renderの環境変数（Environment Variables）から値を取得
     stored_hash = os.getenv("ADMIN_PASSWORD_HASH", "")
     salt = os.getenv("ADMIN_SALT", "")
     
+    # ターミナル（RenderのLogs）に読み込んだ値を表示して確認する
+    print(f"DEBUG - stored_hash: '{stored_hash}'")
+    print(f"DEBUG - salt: '{salt}'")
+    
     if not stored_hash:
+        print("DEBUG - stored_hash が空です！環境変数が読み込めていません。")
         return False
     
-    # 入力されたパスワード + salt を SHA-256 でハッシュ化
     hashed_input = hashlib.sha256((input_password + salt).encode("utf-8")).hexdigest()
+    print(f"DEBUG - hashed_input: '{hashed_input}'")
     
     return hashed_input == stored_hash
 
