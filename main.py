@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
+from datetime import date
 import hashlib
 import os
 
@@ -15,7 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Supabaseクライアントの初期化
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
@@ -23,12 +23,28 @@ supabase: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# リクエストデータ構造
+# --- リクエストデータモデル ---
 class LoginRequest(BaseModel):
     password: str
 
-class MemberRequest(BaseModel):
+class MemberCheckRequest(BaseModel):
     username: str
+
+class RegisterRequest(BaseModel):
+    username: str
+    grade: int
+    member_class: str  # Python予約語 'class' との衝突回避のため別名で受け取る
+    course: str
+    number: str
+    gender: str
+    dormitory: bool
+    room: int | None = None  # 自宅生の場合は None (null)
+    single: bool
+    line: str
+    multi: str
+    band: str
+    instrument: str
+
 
 # 1. 共通パスワード認証
 @app.post("/api/verify-password")
@@ -44,39 +60,74 @@ def verify_password(req: LoginRequest):
     else:
         return {"success": False, "message": "パスワードが正しくありません"}
 
-# 2. 名前チェック ＆ Supabaseへのログイン/保存
+
+# 2. 名前チェック ＆ 既存データの返却
 @app.post("/api/check-member")
-def check_member(req: MemberRequest):
+def check_member(req: MemberCheckRequest):
     username = req.username.strip()
 
     if not username:
         return {"success": False, "message": "名前を入力してください"}
 
     if not supabase:
-        return {"success": False, "message": "データベース接続が設定されていません"}
+        return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # Supabaseの members テーブルから名前を検索
         response = supabase.table("members").select("*").eq("username", username).execute()
-        existing_members = response.data
-
-        # すでに登録されている場合
-        if len(existing_members) > 0:
+        
+        if len(response.data) > 0:
             return {
                 "success": True,
                 "is_new_user": False,
+                "user_data": response.data[0],
                 "message": f"おかえりなさい、{username}さん！"
             }
-        
-        # 未登録の場合 ➔ members テーブルに新規挿入
         else:
-            supabase.table("members").insert({"username": username}).execute()
             return {
                 "success": True,
                 "is_new_user": True,
-                "message": f"ようこそ！{username}さんを名簿に新規登録しました。"
+                "message": f"{username}さんは未登録です。プロフィールを入力してください。"
             }
 
     except Exception as e:
         print(f"Database error: {e}")
-        return {"success": False, "message": "データベース処理中にエラーが発生しました"}
+        return {"success": False, "message": "データベース処理エラー"}
+
+
+# 3. 新規部員アカウント登録（全項目をSupabaseへ保存）
+@app.post("/api/register-member")
+def register_member(req: RegisterRequest):
+    if not req.username.strip():
+        return {"success": False, "message": "名前を入力してください"}
+
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # Supabaseのテーブル定義に合わせた辞書を作成
+        new_data = {
+            "username": req.username.strip(),
+            "grade": req.grade,
+            "class": req.member_class.strip(),
+            "course": req.course.strip(),
+            "number": req.number.strip(),
+            "gender": req.gender.strip(),
+            "dormitory": req.dormitory,
+            "room": req.room,
+            "single": req.single,
+            "line": req.line.strip(),
+            "multi": req.multi.strip(),
+            "band": req.band.strip(),
+            "instrument": req.instrument.strip(),
+            "update": date.today().isoformat()  # 今日の日付 (YYYY-MM-DD)
+        }
+        
+        supabase.table("members").insert(new_data).execute()
+
+        return {
+            "success": True,
+            "message": f"ようこそ！{req.username}さんの部員登録が完了しました。"
+        }
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "登録処理中にエラーが発生しました"}
