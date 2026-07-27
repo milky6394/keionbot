@@ -3,10 +3,53 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
 import hashlib
 import os
+from pydantic import BaseModel
 
 from config import supabase
-from schemas import LoginRequest, MemberCheckRequest, RegisterRequest, UpdateMemberRequest
 
+# --------------------------------------------------
+# リクエストボディの型定義 (BaseModel)
+# --------------------------------------------------
+class LoginRequest(BaseModel):
+    password: str
+
+class MemberCheckRequest(BaseModel):
+    username: str
+
+class RegisterRequest(BaseModel):
+    username: str
+    grade: int
+    member_class: str
+    course: str
+    number: str
+    gender: str
+    dormitory: bool
+    room: int | None = None
+    single: bool
+    line: str
+    multi: str
+
+class UpdateMemberRequest(BaseModel):
+    username: str
+    grade: int
+    member_class: str
+    course: str
+    number: str
+    gender: str
+    dormitory: bool
+    room: int | None = None
+    single: bool
+    line: str
+    multi: str
+
+class DeleteAccountRequest(BaseModel):
+    username: str
+    password: str
+
+
+# --------------------------------------------------
+# FastAPI アプリ初期化 & CORS設定
+# --------------------------------------------------
 app = FastAPI()
 
 app.add_middleware(
@@ -17,6 +60,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# --------------------------------------------------
+# API エンドポイント
+# --------------------------------------------------
 
 # 1. 共通パスワード認証
 @app.post("/api/verify-password")
@@ -91,7 +138,6 @@ def register_member(req: RegisterRequest):
             "update": date.today().isoformat()
         }
         
-        # 登録実行＆登録したデータを取得
         res = supabase.table("members").insert(new_data).execute()
         created_user = res.data[0] if res.data else new_data
 
@@ -103,6 +149,7 @@ def register_member(req: RegisterRequest):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "登録処理中にエラーが発生しました"}
+
 
 # 4. 部員情報の更新 API
 @app.put("/api/update-member")
@@ -130,7 +177,6 @@ def update_member(req: UpdateMemberRequest):
             "update": date.today().isoformat()
         }
 
-        # Supabaseの update 処理を実行
         res = supabase.table("members").update(updated_data).eq("username", username).execute()
 
         if len(res.data) > 0:
@@ -146,6 +192,7 @@ def update_member(req: UpdateMemberRequest):
         print(f"Database error: {e}")
         return {"success": False, "message": "更新処理中にエラーが発生しました"}
 
+
 # 5. 全部員一覧取得 API
 @app.get("/api/get-members")
 def get_members():
@@ -153,7 +200,6 @@ def get_members():
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # 学年昇順・学籍番号昇順で並び替えて取得
         res = supabase.table("members").select("*").order("grade").order("number").execute()
 
         return {
@@ -163,6 +209,7 @@ def get_members():
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "部員データの取得に失敗しました"}
+
 
 # 6. アカウント削除（退部） API
 @app.post("/api/delete-account")
