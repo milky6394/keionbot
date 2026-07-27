@@ -18,18 +18,22 @@ class LoginRequest(BaseModel):
     password: str
 
 def check_password(input_password: str) -> bool:
-    stored_hash = os.getenv("ADMIN_PASSWORD_HASH", "")
-    salt = os.getenv("ADMIN_SALT", "")
+    stored_hash = os.getenv("ADMIN_PASSWORD_HASH", "").strip()
+    salt = os.getenv("ADMIN_SALT", "").strip()
     
-    # ターミナル（RenderのLogs）に読み込んだ値を表示して確認する
+    # 送られてきたパスワードの前後から空白・改行（\n や \r）を除去する
+    clean_password = input_password.strip()
+    
     print(f"DEBUG - stored_hash: '{stored_hash}'")
     print(f"DEBUG - salt: '{salt}'")
+    print(f"DEBUG - clean_password: '{clean_password}'")
     
     if not stored_hash:
         print("DEBUG - stored_hash が空です！環境変数が読み込めていません。")
         return False
     
-    hashed_input = hashlib.sha256((input_password + salt).encode("utf-8")).hexdigest()
+    # 除去後のパスワードでハッシュ化
+    hashed_input = hashlib.sha256((clean_password + salt).encode("utf-8")).hexdigest()
     print(f"DEBUG - hashed_input: '{hashed_input}'")
     
     return hashed_input == stored_hash
