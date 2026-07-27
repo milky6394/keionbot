@@ -19,7 +19,6 @@ class RegisterRequest(BaseModel):
     line: str
     multi: str
 
-    # 既存のクラスの下に追記
 class UpdateMemberRequest(BaseModel):
     username: str
     grade: int
@@ -32,3 +31,7 @@ class UpdateMemberRequest(BaseModel):
     single: bool
     line: str
     multi: str
+
+class DeleteAccountRequest(BaseModel):
+    username: str
+    password: str

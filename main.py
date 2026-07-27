@@ -163,3 +163,44 @@ def get_members():
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "部員データの取得に失敗しました"}
+
+# 6. アカウント削除（退部） API
+@app.post("/api/delete-account")
+def delete_account(req: DeleteAccountRequest):
+    username = req.username.strip()
+    clean_password = req.password.strip()
+
+    if not username or not clean_password:
+        return {"success": False, "message": "ユーザー名とパスワードを入力してください"}
+
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    # 1. 共通パスワード認証のチェック
+    stored_hash = os.getenv("ADMIN_PASSWORD_HASH", "").strip()
+    salt = os.getenv("ADMIN_SALT", "").strip()
+    hashed_input = hashlib.sha256((clean_password + salt).encode("utf-8")).hexdigest()
+
+    if hashed_input != stored_hash:
+        return {"success": False, "message": "パスワードが正しくありません"}
+
+    try:
+        # 2. 対象ユーザーの存在確認
+        check_res = supabase.table("members").select("*").eq("username", username).execute()
+        if len(check_res.data) == 0:
+            return {"success": False, "message": "対象の部員が見つかりませんでした"}
+
+        # 3. Supabase からデータ削除
+        res = supabase.table("members").delete().eq("username", username).execute()
+
+        if len(res.data) > 0:
+            return {
+                "success": True,
+                "message": f"{username}さんのアカウントを削除（退部完了）しました。"
+            }
+        else:
+            return {"success": False, "message": "削除処理に失敗しました"}
+
+    except Exception as e:
+        print(f"Database delete error: {e}")
+        return {"success": False, "message": "削除処理中にエラーが発生しました"}
