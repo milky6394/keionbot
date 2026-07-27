@@ -5,7 +5,7 @@ import hashlib
 import os
 
 from config import supabase
-from schemas import LoginRequest, MemberCheckRequest, RegisterRequest
+from schemas import LoginRequest, MemberCheckRequest, RegisterRequest, UpdateMemberRequest
 
 app = FastAPI()
 
@@ -103,3 +103,45 @@ def register_member(req: RegisterRequest):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "登録処理中にエラーが発生しました"}
+
+    # 4. 部員情報の更新 API
+@app.put("/api/update-member")
+def update_member(req: UpdateMemberRequest):
+    username = req.username.strip()
+
+    if not username:
+        return {"success": False, "message": "ユーザー名が不整合です"}
+
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        updated_data = {
+            "grade": req.grade,
+            "class": req.member_class.strip(),
+            "course": req.course.strip(),
+            "number": req.number.strip(),
+            "gender": req.gender.strip(),
+            "dormitory": req.dormitory,
+            "room": req.room,
+            "single": req.single,
+            "line": req.line.strip(),
+            "multi": req.multi.strip(),
+            "update": date.today().isoformat()
+        }
+
+        # Supabaseの update 処理を実行
+        res = supabase.table("members").update(updated_data).eq("username", username).execute()
+
+        if len(res.data) > 0:
+            return {
+                "success": True,
+                "user_data": res.data[0],
+                "message": "プロフィール情報を更新しました。"
+            }
+        else:
+            return {"success": False, "message": "対象の部員が見つかりませんでした"}
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "更新処理中にエラーが発生しました"}
