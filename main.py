@@ -16,7 +16,8 @@ from schemas import (
     BandUpdateRequest,
     BandDeleteRequest,
     EventCreateRequest,
-    WishSubmitRequest
+    WishSubmitRequest,
+    SubmitWishesRequest
 )
 
 # --------------------------------------------------
