@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class LoginRequest(BaseModel):
     password: str
@@ -15,7 +15,7 @@ class RegisterRequest(BaseModel):
     number: str
     gender: str
     dormitory: bool
-    room: int | None = None
+    room: Optional[int] = None
     single: bool
     line: str
     multi: str
@@ -28,7 +28,7 @@ class UpdateMemberRequest(BaseModel):
     number: str
     gender: str
     dormitory: bool
-    room: int | None = None
+    room: Optional[int] = None
     single: bool
     line: str
     multi: str
@@ -37,10 +37,12 @@ class DeleteAccountRequest(BaseModel):
     username: str
     password: str
 
+# 1. メンバー単体の定義（こちらを上に置く）
 class BandMemberItem(BaseModel):
     username: str
     part: str
 
+# 2. バンド全体の定義（上で定義した BandMemberItem を使う）
 class BandRegisterRequest(BaseModel):
     band_name: str
     members: List[BandMemberItem]

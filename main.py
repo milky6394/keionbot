@@ -3,49 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
 import hashlib
 import os
-from pydantic import BaseModel
 
 from config import supabase
-
-# --------------------------------------------------
-# リクエストボディの型定義 (BaseModel)
-# --------------------------------------------------
-class LoginRequest(BaseModel):
-    password: str
-
-class MemberCheckRequest(BaseModel):
-    username: str
-
-class RegisterRequest(BaseModel):
-    username: str
-    grade: int
-    member_class: str
-    course: str
-    number: str
-    gender: str
-    dormitory: bool
-    room: int | None = None
-    single: bool
-    line: str
-    multi: str
-
-class UpdateMemberRequest(BaseModel):
-    username: str
-    grade: int
-    member_class: str
-    course: str
-    number: str
-    gender: str
-    dormitory: bool
-    room: int | None = None
-    single: bool
-    line: str
-    multi: str
-
-class DeleteAccountRequest(BaseModel):
-    username: str
-    password: str
-
+# schemas.py からすべての型定義をインポート
+from schemas import (
+    LoginRequest,
+    MemberCheckRequest,
+    RegisterRequest,
+    UpdateMemberRequest,
+    DeleteAccountRequest,
+    BandRegisterRequest
+)
 
 # --------------------------------------------------
 # FastAPI アプリ初期化 & CORS設定
@@ -251,6 +219,7 @@ def delete_account(req: DeleteAccountRequest):
     except Exception as e:
         print(f"Database delete error: {e}")
         return {"success": False, "message": "削除処理中にエラーが発生しました"}
+
 
 # 7. バンド新規登録 API
 @app.post("/api/register-band")
