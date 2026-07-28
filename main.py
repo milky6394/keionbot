@@ -666,3 +666,24 @@ def calculate_and_save_assignments(event_id: int):
     except Exception as e:
         print(f"Assignment calculation error: {e}")
         return {"success": False, "message": f"計算処理中にエラーが発生しました: {str(e)}"}
+
+# 17. 割り当て結果の取得 API
+@app.get("/api/get-assignments/{event_id}")
+def get_assignments(event_id: int):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # practice_assignments テーブルから取得
+        res = supabase.table("practice_assignments") \
+            .select("*, bands(band_name)") \
+            .eq("event_id", event_id) \
+            .execute()
+
+        return {
+            "success": True,
+            "assignments": res.data if res.data else []
+        }
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "割り当てデータの取得に失敗しました"}
