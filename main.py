@@ -671,7 +671,7 @@ def calculate_and_save_assignments(event_id: int):
 @app.get("/api/get-assignments/{event_id}")
 async def get_assignments(event_id: int):
     """
-    指定されたイベントの割り当て結果を取得し、バンド名と紐付けて返す
+    指定されたイベントの割り当て結果を取得し、バンド名(band_name)と紐付けて返す
     """
     try:
         # 1. practice_assignments から対象イベントの割当を取得
@@ -683,12 +683,12 @@ async def get_assignments(event_id: int):
         if not assign_res.data:
             return {"success": True, "assignments": []}
 
-        # 2. 全バンド情報を取得して ID -> 名前 の辞書を作成 (確実に名前をひくため)
-        bands_res = supabase.table("bands").select("id, name").execute()
+        # 2. 全バンド情報を取得（id と band_name）
+        bands_res = supabase.table("bands").select("id, band_name").execute()
         band_map = {}
         if bands_res.data:
             for b in bands_res.data:
-                band_map[str(b["id"])] = b.get("name", "名称不明")
+                band_map[str(b["id"])] = b.get("band_name", "名称不明")
 
         # 3. 割当データにバンド名をセット
         assignments = []
