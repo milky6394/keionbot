@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from assignment_logic import calculate_band_assignments
 from datetime import date
 import hashlib
 import os
@@ -615,3 +616,53 @@ def get_band_wishes(event_id: int, band_id: int):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": f"バンド希望集計中にエラーが発生しました: {str(e)}"}
+
+@app.post("/api/admin/calculate-and-save-assignments/{event_id}")
+def calculate_and_save_assignments(event_id: int):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. 必要なデータを一括取得
+        slots_res = supabase.table("practice_slots").select("*").eq("event_id", event_id).execute()
+        bands_res = supabase.table("bands").select("*").execute()
+        members_res = supabase.table("band_members").select("*").execute()
+        wishes_res = supabase.table("practice_wishes").select("*").eq("event_id", event_id).execute()
+
+        slots = slots_res.data or []
+        bands = bands_res.data or []
+        band_members = members_res.data or []
+        wishes = wishes_res.data or []
+
+        if not slots or not bands:
+            return {"success": False, "message": "計算に必要なコマ枠またはバンドデータが存在しません"}
+
+        # 2. 自動割り当て計算を実行
+        assignments = calculate_band_assignments(slots, bands, band_members, wishes)
+
+        # 3. 既存の割り当て結果をクリアして更新保存
+        supabase.table("practice_assignments").delete().eq("event_id", event_id).execute()
+
+        if assignments:
+            records_to_insert = [
+                {
+                    "event_id": event_id,
+                    "slot_id": a["slot_id"],
+                    "band_id": a["band_id"]
+                }
+                for a in assignments
+            ]
+            supabase.table("practice_assignments").insert(records_to_insert).execute()
+
+        # 4. イベントステータスを 'published' に更新
+        supabase.table("practice_events").update({"status": "published"}).eq("id", event_id).execute()
+
+        return {
+            "success": True,
+            "message": f"自動割り当てが完了しました！（割り当て数: {len(assignments)}コマ）",
+            "assignments": assignments
+        }
+
+    except Exception as e:
+        print(f"Assignment calculation error: {e}")
+        return {"success": False, "message": f"計算処理中にエラーが発生しました: {str(e)}"}
