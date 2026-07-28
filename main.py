@@ -269,3 +269,44 @@ def register_band(req: BandRegisterRequest):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "バンド登録処理中にエラーが発生しました"}
+
+# 8. バンド一覧 & メンバー取得 API
+@app.get("/api/get-bands")
+def get_bands():
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. バンド一覧を取得（新しい順）
+        bands_res = supabase.table("bands").select("*").order("id", desc=True).execute()
+        bands = bands_res.data if bands_res.data else []
+
+        if not bands:
+            return {"success": True, "bands": []}
+
+        # 2. 全メンバー構成を取得
+        members_res = supabase.table("band_members").select("*").execute()
+        all_members = members_res.data if members_res.data else []
+
+        # 3. バンドIDごとにメンバーをグループ化して結合
+        result = []
+        for band in bands:
+            band_id = band["id"]
+            # このバンドに所属するメンバーを抽出
+            b_members = [m for m in all_members if m["band_id"] == band_id]
+            
+            result.append({
+                "id": band["id"],
+                "band_name": band["band_name"],
+                "created_at": band.get("created_at"),
+                "members": b_members
+            })
+
+        return {
+            "success": True,
+            "bands": result
+        }
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "バンド一覧の取得に失敗しました"}
