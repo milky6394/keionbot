@@ -13,7 +13,8 @@ from schemas import (
     UpdateMemberRequest,
     DeleteAccountRequest,
     BandRegisterRequest,
-    BandUpdateRequest
+    BandUpdateRequest,
+    BandDeleteRequest
 )
 
 # --------------------------------------------------
@@ -374,3 +375,25 @@ def update_band(data: BandUpdateRequest):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "バンド情報の更新に失敗しました"}
+
+# 11. バンド削除 API
+@app.post("/api/delete-band")
+def delete_band(data: BandDeleteRequest):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. 関連するバンドメンバー情報を先に削除
+        supabase.table("band_members").delete().eq("band_id", data.band_id).execute()
+
+        # 2. バンド本体を削除
+        res = supabase.table("bands").delete().eq("id", data.band_id).execute()
+
+        if not res.data:
+            return {"success": False, "message": "対象のバンドが見つからないか、削除に失敗しました"}
+
+        return {"success": True, "message": "バンドを削除しました！"}
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "バンドの削除に失敗しました"}
