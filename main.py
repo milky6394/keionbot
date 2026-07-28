@@ -669,24 +669,42 @@ def calculate_and_save_assignments(event_id: int):
 
 # 17. 割り当て結果の取得 API
 @app.get("/api/get-assignments/{event_id}")
-def get_assignments(event_id: int):
-    if not supabase:
-        return {"success": False, "message": "データベース接続エラー"}
-
+async def get_assignments(event_id: int):
+    """
+    指定されたイベントの割り当て結果を取得し、バンド名と紐付けて返す
+    """
     try:
-        # practice_assignments テーブルから取得
-        res = supabase.table("practice_assignments") \
-            .select("*, bands(band_name)") \
+        # 1. practice_assignments から対象イベントの割当を取得
+        assign_res = supabase.table("practice_assignments") \
+            .select("slot_id, band_id") \
             .eq("event_id", event_id) \
             .execute()
 
-        return {
-            "success": True,
-            "assignments": res.data if res.data else []
-        }
+        if not assign_res.data:
+            return {"success": True, "assignments": []}
+
+        # 2. 全バンド情報を取得して ID -> 名前 の辞書を作成 (確実に名前をひくため)
+        bands_res = supabase.table("bands").select("id, name").execute()
+        band_map = {}
+        if bands_res.data:
+            for b in bands_res.data:
+                band_map[str(b["id"])] = b.get("name", "名称不明")
+
+        # 3. 割当データにバンド名をセット
+        assignments = []
+        for row in assign_res.data:
+            b_id = str(row.get("band_id"))
+            assignments.append({
+                "slot_id": row.get("slot_id"),
+                "band_id": row.get("band_id"),
+                "band_name": band_map.get(b_id, "名称不明")
+            })
+
+        return {"success": True, "assignments": assignments}
+
     except Exception as e:
-        print(f"Database error: {e}")
-        return {"success": False, "message": "割り当てデータの取得に失敗しました"}
+        print(f"Get Assignments Error: {e}")
+        return {"success": False, "message": f"割り当てデータの取得に失敗しました: {str(e)}", "assignments": []}
 
 @app.post("/api/admin/publish-event/{event_id}")
 async def publish_event(event_id: int):
