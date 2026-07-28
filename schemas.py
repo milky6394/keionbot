@@ -60,3 +60,28 @@ class BandUpdateRequest(BaseModel):
 
 class BandDeleteRequest(BaseModel):
     band_id: int
+
+# --- イベント作成用 ---
+class SlotCreateItem(BaseModel):
+    date: str          # "YYYY-MM-DD"
+    slot_number: int   # 1, 2, 3...
+    start_time: str    # "10:00"
+    end_time: str      # "11:00"
+
+class EventCreateRequest(BaseModel):
+    title: str
+    deadline: str      # "YYYY-MM-DDTHH:MM"
+    slots: List[SlotCreateItem]
+
+# --- 部員希望提出用 ---
+class SingleWishItem(BaseModel):
+    slot_id: int
+    wish_level: int    # 0: 行けない, 1: 行ける, 2: ここがありがたい
+
+class WishSubmitRequest(BaseModel):
+    username: str
+    wishes: List[SingleWishItem]
+
+# --- 割り当て計算・保存用 ---
+class CalculateAssignmentRequest(BaseModel):
+    event_id: int

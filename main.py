@@ -14,7 +14,9 @@ from schemas import (
     DeleteAccountRequest,
     BandRegisterRequest,
     BandUpdateRequest,
-    BandDeleteRequest
+    BandDeleteRequest,
+    EventCreateRequest,
+    WishSubmitRequest
 )
 
 # --------------------------------------------------
@@ -397,3 +399,226 @@ def delete_band(data: BandDeleteRequest):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "バンドの削除に失敗しました"}
+
+# ==================================================
+# 練習希望・割り当て機能 API
+# ==================================================
+
+# 12. 管理者：練習割り当てイベントの作成 API
+@app.post("/api/admin/create-event")
+def create_event(data: EventCreateRequest):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. イベント本体の登録
+        event_res = supabase.table("practice_events").insert({
+            "title": data.title,
+            "deadline": data.deadline,
+            "status": "open"
+        }).execute()
+
+        if not event_res.data:
+            return {"success": False, "message": "イベントの作成に失敗しました"}
+
+        event_id = event_res.data[0]["id"]
+
+        # 2. 枠（コマ）の一括登録
+        slots_to_insert = [
+            {
+                "event_id": event_id,
+                "date": s.date,
+                "slot_number": s.slot_number,
+                "start_time": s.start_time,
+                "end_time": s.end_time
+            }
+            for s in data.slots
+        ]
+
+        if slots_to_insert:
+            supabase.table("practice_slots").insert(slots_to_insert).execute()
+
+        return {"success": True, "message": "練習イベントを作成しました！", "event_id": event_id}
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "イベント作成処理中にエラーが発生しました"}
+
+
+# 13. 現在アクティブな練習イベントとコマ枠の取得 API
+@app.get("/api/get-active-event")
+def get_active_event():
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 最新のopenなイベントを取得 (なければ直近のものを取得)
+        event_res = supabase.table("practice_events") \
+            .select("*") \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+
+        if not event_res.data:
+            return {"success": False, "message": "現在募集中の練習イベントはありません"}
+
+        event = event_res.data[0]
+
+        # イベントに紐づくコマ枠を取得 (日付・コマ順)
+        slots_res = supabase.table("practice_slots") \
+            .select("*") \
+            .eq("event_id", event["id"]) \
+            .order("date", desc=False) \
+            .order("slot_number", desc=False) \
+            .execute()
+
+        return {
+            "success": True,
+            "event": event,
+            "slots": slots_res.data if slots_res.data else []
+        }
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "イベントデータの取得に失敗しました"}
+
+
+# 14. 部員：個人希望の提出・一括更新 API
+@app.post("/api/submit-wishes")
+def submit_wishes(data: WishSubmitRequest):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        wishes_to_upsert = [
+            {
+                "slot_id": w.slot_id,
+                "username": data.username,
+                "wish_level": w.wish_level
+            }
+            for w in data.wishes
+        ]
+
+        if wishes_to_upsert:
+            # (slot_id, username) をユニークキーとして更新/挿入
+            supabase.table("practice_wishes").upsert(
+                wishes_to_upsert,
+                on_conflict="slot_id, username"
+            ).execute()
+
+        return {"success": True, "message": "練習希望を提出しました！"}
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "希望の提出処理に失敗しました"}
+
+
+# 15. 部員：自分が提出済みの希望一覧取得 API
+@app.get("/api/get-my-wishes/{event_id}/{username}")
+def get_my_wishes(event_id: int, username: str):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 該当イベントの全コマIDを取得
+        slots_res = supabase.table("practice_slots").select("id").eq("event_id", event_id).execute()
+        if not slots_res.data:
+            return {"success": True, "wishes": []}
+
+        slot_ids = [s["id"] for s in slots_res.data]
+
+        # 該当ユーザーかつ上記コマの希望を取得
+        wishes_res = supabase.table("practice_wishes") \
+            .select("*") \
+            .in_("slot_id", slot_ids) \
+            .eq("username", username) \
+            .execute()
+
+        return {"success": True, "wishes": wishes_res.data if wishes_res.data else []}
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "個人希望データの取得に失敗しました"}
+
+
+# 16. バンド単位の希望集計 API (全員可でないとNGルール適用)
+@app.get("/api/get-band-wishes/{event_id}/{band_id}")
+def get_band_wishes(event_id: int, band_id: int):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. バンドメンバー一覧の取得
+        members_res = supabase.table("band_members").select("username").eq("band_id", band_id).execute()
+        if not members_res.data:
+            return {"success": False, "message": "該当バンドにメンバーが登録されていません"}
+
+        member_usernames = [m["username"] for m in members_res.data]
+        member_count = len(member_usernames)
+
+        # 2. 対象イベントの全コマ枠を取得
+        slots_res = supabase.table("practice_slots").select("*").eq("event_id", event_id).order("date").order("slot_number").execute()
+        slots = slots_res.data if slots_res.data else []
+
+        if not slots:
+            return {"success": True, "band_wishes": []}
+
+        slot_ids = [s["id"] for s in slots]
+
+        # 3. メンバー全員の全回答を一括取得
+        wishes_res = supabase.table("practice_wishes") \
+            .select("*") \
+            .in_("slot_id", slot_ids) \
+            .in_("username", member_usernames) \
+            .execute()
+
+        # データをコマIDごとにグループ化 -> { slot_id: { username: wish_level } }
+        wishes_by_slot = {}
+        for w in (wishes_res.data or []):
+            sid = w["slot_id"]
+            if sid not in wishes_by_slot:
+                wishes_by_slot[sid] = {}
+            wishes_by_slot[sid][w["username"]] = w["wish_level"]
+
+        # 4. 各コマごとにバンド全体の希望を判定
+        band_wishes_result = []
+
+        for slot in slots:
+            sid = slot["id"]
+            user_responses = wishes_by_slot.get(sid, {})
+
+            # 全員が未提出の場合は未確定扱い（または行けない扱い）
+            # 未回答の人がいる場合はデフォルトで0(行けない)とする安全設計
+            if len(user_responses) < member_count:
+                band_status = 0 # 1人でも未回答＝NGとして扱う
+            else:
+                levels = list(user_responses.values())
+
+                # 【最重要制約】1人でも 0 (行けない) が入っていればバンド全体も 0 (行けない)
+                if 0 in levels:
+                    band_status = 0
+                elif all(lvl == 2 for lvl in levels):
+                    band_status = 2 # 全員「ここがありがたい」
+                else:
+                    band_status = 1 # 全員行ける（1または2混在）
+
+            band_wishes_result.append({
+                "slot_id": sid,
+                "date": slot["date"],
+                "slot_number": slot["slot_number"],
+                "start_time": slot["start_time"],
+                "end_time": slot["end_time"],
+                "band_status": band_status,
+                "member_responses": user_responses # デバッグ・個別状況用
+            })
+
+        return {
+            "success": True,
+            "band_id": band_id,
+            "member_count": member_count,
+            "band_wishes": band_wishes_result
+        }
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "バンド希望集計中にエラーが発生しました"}
