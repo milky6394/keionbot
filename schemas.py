@@ -78,6 +78,11 @@ class SingleWishItem(BaseModel):
     slot_id: int
     wish_level: int    # 0: 行けない, 1: 行ける, 2: ここがありがたい
 
+class SubmitWishesRequest(BaseModel):
+    event_id: int
+    username: str
+    wishes: List[SingleWishItem]
+
 class WishSubmitRequest(BaseModel):
     username: str
     wishes: List[SingleWishItem]

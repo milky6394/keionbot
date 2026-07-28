@@ -483,61 +483,50 @@ def get_active_event():
 
 # 14. 部員：個人希望の提出・一括更新 API
 @app.post("/api/submit-wishes")
-def submit_wishes(data: WishSubmitRequest):
+def submit_wishes(data: SubmitWishesRequest):
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        wishes_to_upsert = [
+        # UPSERT 用のデータを作成
+        records = [
             {
-                "slot_id": w.slot_id,
+                "event_id": data.event_id,
                 "username": data.username,
+                "slot_id": w.slot_id,
                 "wish_level": w.wish_level
             }
             for w in data.wishes
         ]
 
-        if wishes_to_upsert:
-            # (slot_id, username) をユニークキーとして更新/挿入
-            supabase.table("practice_wishes").upsert(
-                wishes_to_upsert,
-                on_conflict="slot_id, username"
-            ).execute()
+        # 既存データを一括更新 (ON CONFLICT ON (username, slot_id) DO UPDATE)
+        supabase.table("practice_wishes").upsert(
+            records,
+            on_conflict="username,slot_id"
+        ).execute()
 
-        return {"success": True, "message": "練習希望を提出しました！"}
+        return {"success": True, "message": "希望を正常に保存しました"}
 
     except Exception as e:
         print(f"Database error: {e}")
-        return {"success": False, "message": "希望の提出処理に失敗しました"}
-
+        return {"success": False, "message": f"希望の保存中にエラーが発生しました: {str(e)}"}
 
 # 15. 部員：自分が提出済みの希望一覧取得 API
-@app.get("/api/get-my-wishes/{event_id}/{username}")
-def get_my_wishes(event_id: int, username: str):
+@app.get("/api/get-user-wishes/{event_id}/{username}")
+def get_user_wishes(event_id: int, username: str):
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # 該当イベントの全コマIDを取得
-        slots_res = supabase.table("practice_slots").select("id").eq("event_id", event_id).execute()
-        if not slots_res.data:
-            return {"success": True, "wishes": []}
-
-        slot_ids = [s["id"] for s in slots_res.data]
-
-        # 該当ユーザーかつ上記コマの希望を取得
-        wishes_res = supabase.table("practice_wishes") \
+        res = supabase.table("practice_wishes") \
             .select("*") \
-            .in_("slot_id", slot_ids) \
+            .eq("event_id", event_id) \
             .eq("username", username) \
             .execute()
 
-        return {"success": True, "wishes": wishes_res.data if wishes_res.data else []}
-
+        return {"success": True, "wishes": res.data if res.data else []}
     except Exception as e:
-        print(f"Database error: {e}")
-        return {"success": False, "message": "個人希望データの取得に失敗しました"}
-
+        return {"success": False, "message": str(e)}
 
 # 16. バンド単位の希望集計 API (曜日仕様 & 全員可でないとNGルール適用)
 @app.get("/api/get-band-wishes/{event_id}/{band_id}")
