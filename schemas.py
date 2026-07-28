@@ -63,7 +63,7 @@ class BandDeleteRequest(BaseModel):
 
 # --- イベント作成用 ---
 class SlotCreateItem(BaseModel):
-    date: str          # "YYYY-MM-DD"
+    day_of_week: int   # 0:日, 1:月, 2:火, 3:水, 4:木, 5:金, 6:土
     slot_number: int   # 1, 2, 3...
     start_time: str    # "10:00"
     end_time: str      # "11:00"

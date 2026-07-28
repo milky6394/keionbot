@@ -423,11 +423,11 @@ def create_event(data: EventCreateRequest):
 
         event_id = event_res.data[0]["id"]
 
-        # 2. 枠（コマ）の一括登録
+        # 2. 曜日ベースのコマ枠の一括登録
         slots_to_insert = [
             {
                 "event_id": event_id,
-                "date": s.date,
+                "day_of_week": s.day_of_week,  # date から day_of_week に修正
                 "slot_number": s.slot_number,
                 "start_time": s.start_time,
                 "end_time": s.end_time
@@ -442,8 +442,7 @@ def create_event(data: EventCreateRequest):
 
     except Exception as e:
         print(f"Database error: {e}")
-        return {"success": False, "message": "イベント作成処理中にエラーが発生しました"}
-
+        return {"success": False, "message": f"イベント作成処理中にエラーが発生しました: {str(e)}"}
 
 # 13. 現在アクティブな練習イベントとコマ枠の取得 API
 @app.get("/api/get-active-event")
