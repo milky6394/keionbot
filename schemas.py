@@ -46,3 +46,14 @@ class BandMemberItem(BaseModel):
 class BandRegisterRequest(BaseModel):
     band_name: str
     members: List[BandMemberItem]
+
+# バンド編集用のメンバー構造
+class MemberUpdateItem(BaseModel):
+    username: str
+    part: str
+
+# バンド編集リクエストボディ
+class BandUpdateRequest(BaseModel):
+    band_id: int
+    band_name: str
+    members: List[MemberUpdateItem]

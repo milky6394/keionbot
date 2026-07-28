@@ -12,7 +12,8 @@ from schemas import (
     RegisterRequest,
     UpdateMemberRequest,
     DeleteAccountRequest,
-    BandRegisterRequest
+    BandRegisterRequest,
+    BandUpdateRequest
 )
 
 # --------------------------------------------------
@@ -310,3 +311,66 @@ def get_bands():
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "バンド一覧の取得に失敗しました"}
+
+# 9. 指定したバンド1件の詳細取得 API
+@app.get("/api/get-band/{band_id}")
+def get_band_detail(band_id: int):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # バンド本データの取得
+        band_res = supabase.table("bands").select("*").eq("id", band_id).execute()
+        if not band_res.data:
+            return {"success": False, "message": "指定されたバンドが見つかりません"}
+
+        band = band_res.data[0]
+
+        # 該当バンドのメンバー取得
+        members_res = supabase.table("band_members").select("*").eq("band_id", band_id).execute()
+        members = members_res.data if members_res.data else []
+
+        return {
+            "success": True,
+            "band": {
+                "id": band["id"],
+                "band_name": band["band_name"],
+                "members": members
+            }
+        }
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "バンド情報の取得に失敗しました"}
+
+
+# 10. バンド更新 API
+@app.post("/api/update-band")
+def update_band(data: BandUpdateRequest):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 1. バンド名の更新
+        supabase.table("bands").update({"band_name": data.band_name}).eq("id", data.band_id).execute()
+
+        # 2. 既存のメンバー構成を一度クリア
+        supabase.table("band_members").delete().eq("band_id", data.band_id).execute()
+
+        # 3. 新しいメンバー構成を登録
+        new_members = [
+            {
+                "band_id": data.band_id,
+                "username": m.username,
+                "part": m.part
+            }
+            for m in data.members
+        ]
+
+        if new_members:
+            supabase.table("band_members").insert(new_members).execute()
+
+        return {"success": True, "message": "バンド情報を更新しました！"}
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        return {"success": False, "message": "バンド情報の更新に失敗しました"}
