@@ -444,14 +444,14 @@ def create_event(data: EventCreateRequest):
         print(f"Database error: {e}")
         return {"success": False, "message": f"イベント作成処理中にエラーが発生しました: {str(e)}"}
 
-# 13. 現在アクティブな練習イベントとコマ枠の取得 API
+# 13. 現在アクティブな練習イベントとコマ枠の取得 API (曜日仕様)
 @app.get("/api/get-active-event")
 def get_active_event():
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # 最新のopenなイベントを取得 (なければ直近のものを取得)
+        # 最新のopenまたはpublishedなイベントを取得
         event_res = supabase.table("practice_events") \
             .select("*") \
             .order("created_at", desc=True) \
@@ -463,11 +463,11 @@ def get_active_event():
 
         event = event_res.data[0]
 
-        # イベントに紐づくコマ枠を取得 (日付・コマ順)
+        # イベントに紐づくコマ枠を取得 (曜日順 -> コマ順でソート)
         slots_res = supabase.table("practice_slots") \
             .select("*") \
             .eq("event_id", event["id"]) \
-            .order("date", desc=False) \
+            .order("day_of_week", desc=False) \
             .order("slot_number", desc=False) \
             .execute()
 
@@ -480,7 +480,6 @@ def get_active_event():
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "イベントデータの取得に失敗しました"}
-
 
 # 14. 部員：個人希望の提出・一括更新 API
 @app.post("/api/submit-wishes")
@@ -540,7 +539,7 @@ def get_my_wishes(event_id: int, username: str):
         return {"success": False, "message": "個人希望データの取得に失敗しました"}
 
 
-# 16. バンド単位の希望集計 API (全員可でないとNGルール適用)
+# 16. バンド単位の希望集計 API (曜日仕様 & 全員可でないとNGルール適用)
 @app.get("/api/get-band-wishes/{event_id}/{band_id}")
 def get_band_wishes(event_id: int, band_id: int):
     if not supabase:
@@ -555,8 +554,14 @@ def get_band_wishes(event_id: int, band_id: int):
         member_usernames = [m["username"] for m in members_res.data]
         member_count = len(member_usernames)
 
-        # 2. 対象イベントの全コマ枠を取得
-        slots_res = supabase.table("practice_slots").select("*").eq("event_id", event_id).order("date").order("slot_number").execute()
+        # 2. 対象イベントの全コマ枠を取得 (曜日順 -> コマ順でソート)
+        slots_res = supabase.table("practice_slots") \
+            .select("*") \
+            .eq("event_id", event_id) \
+            .order("day_of_week", desc=False) \
+            .order("slot_number", desc=False) \
+            .execute()
+        
         slots = slots_res.data if slots_res.data else []
 
         if not slots:
@@ -586,10 +591,9 @@ def get_band_wishes(event_id: int, band_id: int):
             sid = slot["id"]
             user_responses = wishes_by_slot.get(sid, {})
 
-            # 全員が未提出の場合は未確定扱い（または行けない扱い）
-            # 未回答の人がいる場合はデフォルトで0(行けない)とする安全設計
+            # 全員が未提出の場合は未確定（1人でも未回答なら安全のため0=NG扱い）
             if len(user_responses) < member_count:
-                band_status = 0 # 1人でも未回答＝NGとして扱う
+                band_status = 0
             else:
                 levels = list(user_responses.values())
 
@@ -603,12 +607,12 @@ def get_band_wishes(event_id: int, band_id: int):
 
             band_wishes_result.append({
                 "slot_id": sid,
-                "date": slot["date"],
+                "day_of_week": slot["day_of_week"], # date から day_of_week に変更
                 "slot_number": slot["slot_number"],
                 "start_time": slot["start_time"],
                 "end_time": slot["end_time"],
                 "band_status": band_status,
-                "member_responses": user_responses # デバッグ・個別状況用
+                "member_responses": user_responses # 個別状況のデバッグ・確認用
             })
 
         return {
@@ -620,4 +624,4 @@ def get_band_wishes(event_id: int, band_id: int):
 
     except Exception as e:
         print(f"Database error: {e}")
-        return {"success": False, "message": "バンド希望集計中にエラーが発生しました"}
+        return {"success": False, "message": f"バンド希望集計中にエラーが発生しました: {str(e)}"}
