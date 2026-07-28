@@ -687,3 +687,25 @@ def get_assignments(event_id: int):
     except Exception as e:
         print(f"Database error: {e}")
         return {"success": False, "message": "割り当てデータの取得に失敗しました"}
+
+@app.post("/api/admin/publish-event/{event_id}")
+async def publish_event(event_id: int):
+    """
+    割り当て結果を確定し、イベントのステータスを『公開/確定済み』に変更する
+    """
+    try:
+        # イベントの status を 'published' に更新
+        res = supabase.table("practice_events").update({
+            "status": "published"
+        }).eq("id", event_id).execute()
+
+        if not res.data:
+            return {"success": False, "message": "対象のイベントが見つかりませんでした。"}
+
+        return {
+            "success": True, 
+            "message": "割り当て結果を確定・公開しました！部員画面から確認可能になります。"
+        }
+    except Exception as e:
+        print(f"Publish Error: {e}")
+        return {"success": False, "message": f"エラーが発生しました: {str(e)}"}
