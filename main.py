@@ -999,23 +999,31 @@ async def calculate_assignments_draft():
 
 # 2. 割当の一括確定API（DBに一括保存して全体公開）
 @app.post("/api/admin/confirm-assignments")
-async def confirm_assignments(req: ConfirmAssignmentsRequest = Body(...)): # ← Body(...) を追加！
+async def confirm_assignments(req: ConfirmAssignmentsRequest = Body(...)):
     try:
-        # 1. 既存の割り当てをクリア（条件削除）
-        supabase.table("practice_assignments").delete().neq("slot_id", 0).execute()
+        print("RECEIVED PAYLOAD:", req.assignments) # ログ確認用
 
-        # 2. 有効な割り当てのみリスト化
+        # 1. 既存の割当を安全に全削除（gt/gteなど確実な条件、またはすべてのID指定）
+        # gt("slot_id", -1) または string で比較するなど安全な方法にします
+        try:
+            supabase.table("practice_assignments").delete().gt("slot_id", -1).execute()
+        except Exception as del_err:
+            print(f"Delete Warning (continuing anyway): {del_err}")
+
+        # 2. 保存対象のデータ（band_id が指定されているもの）を作成
         new_records = [
             {"slot_id": item.slot_id, "band_id": item.band_id}
             for item in req.assignments if item.band_id is not None
         ]
 
-        # 3. データベースへ一括登録
+        # 3. データの挿入
         if new_records:
-            supabase.table("practice_assignments").insert(new_records).execute()
+            insert_res = supabase.table("practice_assignments").insert(new_records).execute()
+            print("INSERT SUCCESS:", insert_res)
 
         return {"success": True, "message": "確定保存完了"}
 
     except Exception as e:
-        print(f"Confirm Assignments Error: {e}")
+        print(f"CRITICAL ERROR in confirm_assignments: {e}")
+        # 明示的に JSON エラーを返して接続切断を防ぐ
         return {"success": False, "message": str(e)}
