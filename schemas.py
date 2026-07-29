@@ -35,7 +35,6 @@ class UpdateMemberRequest(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     username: str
-    password: str
 
 # 1. メンバー単体の定義（こちらを上に置く）
 class BandMemberItem(BaseModel):
