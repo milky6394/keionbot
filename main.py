@@ -907,3 +907,21 @@ async def update_assignment(payload: dict):
     except Exception as e:
         print(f"Update Assignment Error: {e}")
         return {"success": False, "message": str(e)}
+
+# ユーザーが所属するバンド一覧の取得
+@app.get("/api/get-user-bands/{username}")
+async def get_user_bands(username: str):
+    try:
+        # band_members テーブルから該当ユーザーのバンドIDを取得
+        res = supabase.table("band_members").select("band_id").eq("username", username).execute()
+        if not res.data:
+            return {"success": True, "bands": []}
+
+        band_ids = [r["band_id"] for r in res.data]
+        
+        # バンド名を取得
+        bands_res = supabase.table("bands").select("id, band_name").in_("id", band_ids).execute()
+        return {"success": True, "bands": bands_res.data or []}
+    except Exception as e:
+        print(f"Get User Bands Error: {e}")
+        return {"success": False, "message": str(e), "bands": []}
