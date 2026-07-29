@@ -191,30 +191,20 @@ def get_members():
 @app.post("/api/delete-account")
 def delete_account(req: DeleteAccountRequest):
     username = req.username.strip()
-    clean_password = req.password.strip()
 
-    if not username or not clean_password:
-        return {"success": False, "message": "ユーザー名とパスワードを入力してください"}
+    if not username:
+        return {"success": False, "message": "ユーザー名が指定されていません"}
 
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
 
-    # 1. 共通パスワード認証のチェック
-    stored_hash = os.getenv("ADMIN_PASSWORD_HASH", "").strip()
-    salt = os.getenv("ADMIN_SALT", "").strip()
-    hashed_input = hashlib.sha256((clean_password + salt).encode("utf-8")).hexdigest()
-
-    if hashed_input != stored_hash:
-        return {"success": False, "message": "パスワードが正しくありません"}
-
     try:
-        # 2. 対象ユーザーの存在確認
+        # 1. 対象ユーザーの存在確認
         check_res = supabase.table("members").select("*").eq("username", username).execute()
         if len(check_res.data) == 0:
             return {"success": False, "message": "対象の部員が見つかりませんでした"}
 
-        # ★ 2.5 所属しているバンドからメンバー情報を削る/削除する ★
-        # 中間テーブル (band_members) から該当ユーザーのレコードを削除
+        # 2. 所属しているバンドの中間テーブル (band_members) から該当ユーザーを削除
         supabase.table("band_members").delete().eq("username", username).execute()
 
         # 3. Supabase からユーザーデータを削除
@@ -231,7 +221,6 @@ def delete_account(req: DeleteAccountRequest):
     except Exception as e:
         print(f"Database delete error: {e}")
         return {"success": False, "message": "削除処理中にエラーが発生しました"}
-
 # 7. バンド新規登録 API
 @app.post("/api/register-band")
 def register_band(req: BandRegisterRequest):
