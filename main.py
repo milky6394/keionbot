@@ -213,7 +213,11 @@ def delete_account(req: DeleteAccountRequest):
         if len(check_res.data) == 0:
             return {"success": False, "message": "対象の部員が見つかりませんでした"}
 
-        # 3. Supabase からデータ削除
+        # ★ 2.5 所属しているバンドからメンバー情報を削る/削除する ★
+        # 中間テーブル (band_members) から該当ユーザーのレコードを削除
+        supabase.table("band_members").delete().eq("username", username).execute()
+
+        # 3. Supabase からユーザーデータを削除
         res = supabase.table("members").delete().eq("username", username).execute()
 
         if len(res.data) > 0:
@@ -227,7 +231,6 @@ def delete_account(req: DeleteAccountRequest):
     except Exception as e:
         print(f"Database delete error: {e}")
         return {"success": False, "message": "削除処理中にエラーが発生しました"}
-
 
 # 7. バンド新規登録 API
 @app.post("/api/register-band")
