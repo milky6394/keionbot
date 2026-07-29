@@ -1001,26 +1001,29 @@ async def calculate_assignments_draft():
 @app.post("/api/admin/confirm-assignments")
 async def confirm_assignments(req: ConfirmAssignmentsRequest = Body(...)):
     try:
-        print("RECEIVED PAYLOAD:", req.assignments)
+        print("RECEIVED PAYLOAD:", req.assignments) # ログ出力
 
-        # 全スロット分の更新レコードを作成
-        # (未割り当て(None)の場合は band_id: None で上書きして割り当て解除する)
-        records_to_upsert = [
+        # 1. 保存対象（band_id が指定されている有効な割当）のみ抽出
+        new_records = [
             {"slot_id": item.slot_id, "band_id": item.band_id}
-            for item in req.assignments
+            for item in req.assignments if item.band_id is not None
         ]
 
-        if records_to_upsert:
-            # slot_id をキーにして一括上書き（UPSERT）
-            # ※ practice_assignments テーブルで slot_id に UNIQUE 制約がついている必要があります
-            res = supabase.table("practice_assignments").upsert(
-                records_to_upsert,
-                on_conflict="slot_id"
-            ).execute()
-            print("UPSERT SUCCESS:", res)
+        # 2. 既存の割り当てを安全に全削除
+        # neq("slot_id", -999999) など、実在しない条件を使うことで全件削除を安全に実行
+        try:
+            supabase.table("practice_assignments").delete().neq("slot_id", -999999).execute()
+        except Exception as del_err:
+            print(f"Delete Notice: {del_err}")
+
+        # 3. 新しい割り当てデータを一括挿入（INSERT）
+        if new_records:
+            insert_res = supabase.table("practice_assignments").insert(new_records).execute()
+            print("INSERT SUCCESS:", insert_res)
 
         return {"success": True, "message": "確定保存完了"}
 
     except Exception as e:
         print(f"CRITICAL ERROR in confirm_assignments: {e}")
-        return {"success": False, "message": str(e)}
+        # 例外が発生しても 200 OK でJSONエラーメッセージを返し、CORS切断を防ぐ
+        return {"success": False, "message": f"サーバー内部エラー: {str(e)}"}
