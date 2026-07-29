@@ -925,3 +925,40 @@ async def get_user_bands(username: str):
     except Exception as e:
         print(f"Get User Bands Error: {e}")
         return {"success": False, "message": str(e), "bands": []}
+
+# 指定バンドのメンバーおよび全員の希望データ取得
+@app.get("/api/get-band-members-wishes/{band_id}")
+async def get_band_members_wishes(band_id: int):
+    try:
+        # 1. バンドメンバーを取得
+        members_res = supabase.table("band_members").select("username").eq("band_id", band_id).execute()
+        members = members_res.data or []
+        
+        if not members:
+            return {"success": True, "members": [], "wishes_map": {}}
+
+        member_usernames = [m["username"] for m in members]
+
+        # 2. メンバー全員の練習希望データを取得
+        wishes_res = supabase.table("practice_wishes").select("username, slot_id, wish_level").in_("username", member_usernames).execute()
+        wishes = wishes_res.data or []
+
+        # 3. { username: { slot_id: wish_level } } の構造に整理
+        wishes_map = {}
+        for w in wishes:
+            uname = w["username"]
+            s_id = w["slot_id"]
+            w_lvl = w["wish_level"]
+
+            if uname not in wishes_map:
+                wishes_map[uname] = {}
+            wishes_map[uname][s_id] = w_lvl
+
+        return {
+            "success": True,
+            "members": members,
+            "wishes_map": wishes_map
+        }
+    except Exception as e:
+        print(f"Get Band Members Wishes Error: {e}")
+        return {"success": False, "message": str(e)}
