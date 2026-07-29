@@ -1001,29 +1001,26 @@ async def calculate_assignments_draft():
 @app.post("/api/admin/confirm-assignments")
 async def confirm_assignments(req: ConfirmAssignmentsRequest = Body(...)):
     try:
-        print("RECEIVED PAYLOAD:", req.assignments) # ログ確認用
+        print("RECEIVED PAYLOAD:", req.assignments)
 
-        # 1. 既存の割当を安全に全削除（gt/gteなど確実な条件、またはすべてのID指定）
-        # gt("slot_id", -1) または string で比較するなど安全な方法にします
-        try:
-            supabase.table("practice_assignments").delete().gt("slot_id", -1).execute()
-        except Exception as del_err:
-            print(f"Delete Warning (continuing anyway): {del_err}")
-
-        # 2. 保存対象のデータ（band_id が指定されているもの）を作成
-        new_records = [
+        # 全スロット分の更新レコードを作成
+        # (未割り当て(None)の場合は band_id: None で上書きして割り当て解除する)
+        records_to_upsert = [
             {"slot_id": item.slot_id, "band_id": item.band_id}
-            for item in req.assignments if item.band_id is not None
+            for item in req.assignments
         ]
 
-        # 3. データの挿入
-        if new_records:
-            insert_res = supabase.table("practice_assignments").insert(new_records).execute()
-            print("INSERT SUCCESS:", insert_res)
+        if records_to_upsert:
+            # slot_id をキーにして一括上書き（UPSERT）
+            # ※ practice_assignments テーブルで slot_id に UNIQUE 制約がついている必要があります
+            res = supabase.table("practice_assignments").upsert(
+                records_to_upsert,
+                on_conflict="slot_id"
+            ).execute()
+            print("UPSERT SUCCESS:", res)
 
         return {"success": True, "message": "確定保存完了"}
 
     except Exception as e:
         print(f"CRITICAL ERROR in confirm_assignments: {e}")
-        # 明示的に JSON エラーを返して接続切断を防ぐ
         return {"success": False, "message": str(e)}
