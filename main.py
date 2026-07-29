@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 from assignment_logic import calculate_band_assignments
 from datetime import date
@@ -998,17 +999,18 @@ async def calculate_assignments_draft():
 
 # 2. 割当の一括確定API（DBに一括保存して全体公開）
 @app.post("/api/admin/confirm-assignments")
-async def confirm_assignments(req: ConfirmAssignmentsRequest):
+async def confirm_assignments(req: ConfirmAssignmentsRequest = Body(...)): # ← Body(...) を追加！
     try:
-        # 1. 一旦、既存の確定割り当てデータを全削除（または適切な初期化）
+        # 1. 既存の割り当てをクリア（条件削除）
         supabase.table("practice_assignments").delete().neq("slot_id", 0).execute()
 
-        # 2. band_id が存在する（割り当てられている）データのみ抽出して保存
+        # 2. 有効な割り当てのみリスト化
         new_records = [
             {"slot_id": item.slot_id, "band_id": item.band_id}
             for item in req.assignments if item.band_id is not None
         ]
 
+        # 3. データベースへ一括登録
         if new_records:
             supabase.table("practice_assignments").insert(new_records).execute()
 
