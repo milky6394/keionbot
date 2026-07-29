@@ -749,3 +749,74 @@ async def publish_event(event_id: int):
     except Exception as e:
         print(f"Publish Error: {e}")
         return {"success": False, "message": f"エラーが発生しました: {str(e)}"}
+
+# 1. 割り当て結果の取得（event_id不問）
+@app.get("/api/get-assignments")
+async def get_assignments():
+    try:
+        assign_res = supabase.table("practice_assignments").select("slot_id, band_id").execute()
+        if not assign_res.data:
+            return {"success": True, "assignments": []}
+
+        bands_res = supabase.table("bands").select("id, band_name").execute()
+        band_map = {str(b["id"]): b.get("band_name", "名称不明") for b in (bands_res.data or [])}
+
+        assignments = [
+            {
+                "slot_id": row["slot_id"],
+                "band_id": row["band_id"],
+                "band_name": band_map.get(str(row["band_id"]), "名称不明")
+            }
+            for row in assign_res.data
+        ]
+        return {"success": True, "assignments": assignments}
+    except Exception as e:
+        print(f"Get Assignments Error: {e}")
+        return {"success": False, "message": str(e), "assignments": []}
+
+
+# 2. 自動割当の実行（現時点の練習希望から再計算）
+@app.post("/api/admin/calculate-assignments")
+async def calculate_assignments():
+    try:
+        # --- (ここに割り当て計算ロジック) ---
+        # 1. practice_wishes や band_members などの希望データを取得して計算
+        # 例: new_assignments = [{ "slot_id": 1, "band_id": 2 }, ...]
+        
+        # ※ 現在の割り当てテーブルを全削除して上書き
+        # supabase.table("practice_assignments").delete().neq("id", 0).execute()
+        
+        # if new_assignments:
+        #     supabase.table("practice_assignments").insert(new_assignments).execute()
+
+        # 現段階のテスト用 dummy/実装に合わせて調整してください
+        return {"success": True, "message": "割り当てを作成・更新しました！"}
+    except Exception as e:
+        print(f"Calculate Assignments Error: {e}")
+        return {"success": False, "message": f"計算エラー: {str(e)}"}
+
+
+# 3. 手動での割当変更・解除
+@app.post("/api/admin/update-assignment")
+async def update_assignment(payload: dict):
+    slot_id = payload.get("slot_id")
+    band_id = payload.get("band_id")
+
+    if not slot_id:
+        return {"success": False, "message": "slot_id は必須です。"}
+
+    try:
+        if band_id:
+            # 該当スロットの割り当てを更新（UPSERT）
+            supabase.table("practice_assignments").upsert(
+                {"slot_id": slot_id, "band_id": band_id},
+                on_conflict="slot_id"
+            ).execute()
+        else:
+            # 未割り当て選択時は削除
+            supabase.table("practice_assignments").delete().eq("slot_id", slot_id).execute()
+
+        return {"success": True, "message": "割り当てを更新しました。"}
+    except Exception as e:
+        print(f"Update Assignment Error: {e}")
+        return {"success": False, "message": str(e)}
