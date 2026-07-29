@@ -4,6 +4,7 @@ from assignment_logic import calculate_band_assignments
 from datetime import date
 import hashlib
 import os
+import random  # 優先度が並んだ際 ランダム要素で分ける用
 
 from config import supabase
 # schemas.py からすべての型定義をインポート
@@ -779,22 +780,108 @@ async def get_assignments():
 @app.post("/api/admin/calculate-assignments")
 async def calculate_assignments():
     try:
-        # --- (ここに割り当て計算ロジック) ---
-        # 1. practice_wishes や band_members などの希望データを取得して計算
-        # 例: new_assignments = [{ "slot_id": 1, "band_id": 2 }, ...]
-        
-        # ※ 現在の割り当てテーブルを全削除して上書き
-        # supabase.table("practice_assignments").delete().neq("id", 0).execute()
-        
-        # if new_assignments:
-        #     supabase.table("practice_assignments").insert(new_assignments).execute()
+        # 1. 常設コマ（20コマ）の取得
+        slots_res = supabase.table("practice_slots").select("id").execute()
+        all_slots = slots_res.data or []
+        if not all_slots:
+            return {"success": False, "message": "コマ枠データ(practice_slots)が存在しません。"}
 
-        # 現段階のテスト用 dummy/実装に合わせて調整してください
-        return {"success": True, "message": "割り当てを作成・更新しました！"}
+        # 2. 部員全員の希望データ (practice_wishes) の取得
+        wishes_res = supabase.table("practice_wishes").select("username, slot_id, wish_level").execute()
+        all_wishes = wishes_res.data or []
+
+        # 3. バンド一覧と各バンドのメンバー情報の取得
+        bands_res = supabase.table("bands").select("id, band_name").execute()
+        bands = bands_res.data or []
+        
+        # band_members テーブルからメンバーを取得 (テーブル名・列名は環境に合わせて確認してください)
+        members_res = supabase.table("band_members").select("band_id, username").execute()
+        band_members_list = members_res.data or []
+
+        # バンドごとのメンバーリストを作成
+        band_to_members = {}
+        for bm in band_members_list:
+            b_id = bm["band_id"]
+            if b_id not in band_to_members:
+                band_to_members[b_id] = []
+            band_to_members[b_id].append(bm["username"])
+
+        # ユーザー×コマの希望レベルマップを作成 { (username, slot_id): wish_level }
+        wish_map = {}
+        for w in all_wishes:
+            wish_map[(w["username"], w["slot_id"])] = w["wish_level"]
+
+        # --- 割り当てアルゴリズム ---
+        # 各コマについて、すべてのバンドの「参加可能度（メンバー全員の希望の最低値）」を計算
+        # 0: 全員◯/◎ではない（1人でも✕がいる） -> NG
+        # 1: 全員行ける（◯以上）
+        # 2: 全員が◎
+        
+        assigned_slots = set()      # 既に埋まったコマID
+        assigned_bands = set()      # 既にコマが割り当たったバンドID
+        new_assignments = []
+
+        # すべての (バンド, コマ) の組み合わせのスコアを算出
+        candidates = []
+        for band in bands:
+            b_id = band["id"]
+            members = band_to_members.get(b_id, [])
+            if not members:
+                continue
+
+            for slot in all_slots:
+                s_id = slot["id"]
+                
+                # メンバー全員の希望チェック
+                member_wishes = [wish_map.get((m, s_id), 1) for m in members] # デフォルト1(◯)
+                
+                # 1人でも 0(✕) がいればそのコマは入れない
+                if 0 in member_wishes:
+                    continue
+                
+                # 全員が 2(◎) ならスコア2、それ以外で全員1(◯)以上ならスコア1
+                score = 2 if all(w == 2 for w in member_wishes) else 1
+                
+                # ランダム要素（同点時の分散用）
+                candidates.append({
+                    "band_id": b_id,
+                    "slot_id": s_id,
+                    "score": score,
+                    "rand": random.random()
+                })
+
+        # スコアが高い順（同点ならランダム）に並び替え
+        candidates.sort(key=lambda x: (x["score"], x["rand"]), reverse=True)
+
+        # 1バンドにつき最大1コマ、1コマにつき1バンドを割り当て
+        for cand in candidates:
+            b_id = cand["band_id"]
+            s_id = cand["slot_id"]
+
+            if b_id not in assigned_bands and s_id not in assigned_slots:
+                assigned_bands.add(b_id)
+                assigned_slots.add(s_id)
+                new_assignments.append({
+                    "slot_id": s_id,
+                    "band_id": b_id
+                })
+
+        # 4. データベースの更新
+        # 既存の割り当てを一度クリア
+        supabase.table("practice_assignments").delete().neq("id", 0).execute()
+
+        # 計算結果を挿入
+        if new_assignments:
+            supabase.table("practice_assignments").insert(new_assignments).execute()
+
+        return {
+            "success": True, 
+            "message": f"割り当てを更新しました！（{len(new_assignments)}件のバンドを自動割り当て）"
+        }
+
     except Exception as e:
         print(f"Calculate Assignments Error: {e}")
         return {"success": False, "message": f"計算エラー: {str(e)}"}
-
 
 # 3. 手動での割当変更・解除
 @app.post("/api/admin/update-assignment")
