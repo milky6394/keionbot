@@ -484,34 +484,56 @@ def get_active_event():
         return {"success": False, "message": "イベントデータの取得に失敗しました"}
 
 # 14. 部員：個人希望の提出・一括更新 API
+# 1. 常設20コマの取得
+@app.get("/api/get-practice-slots")
+async def get_practice_slots():
+    try:
+        res = supabase.table("practice_slots") \
+            .select("*") \
+            .order("day_of_week") \
+            .order("slot_number") \
+            .execute()
+        return {"success": True, "slots": res.data or []}
+    except Exception as e:
+        print(f"Get Slots Error: {e}")
+        return {"success": False, "message": str(e), "slots": []}
+
+# 2. ユーザーの練習希望を取得
+@app.get("/api/get-user-wishes/{username}")
+async def get_user_wishes(username: str):
+    try:
+        res = supabase.table("practice_wishes") \
+            .select("slot_id, wish_level") \
+            .eq("username", username) \
+            .execute()
+        return {"success": True, "wishes": res.data or []}
+    except Exception as e:
+        print(f"Get Wishes Error: {e}")
+        return {"success": False, "message": str(e), "wishes": []}
+
+# 3. 練習希望の保存（DELETE + INSERT）
 @app.post("/api/submit-wishes")
-def submit_wishes(data: SubmitWishesRequest):
-    if not supabase:
-        return {"success": False, "message": "データベース接続エラー"}
+async def submit_wishes(payload: dict):
+    username = payload.get("username")
+    wishes = payload.get("wishes", [])
+    if not username:
+        return {"success": False, "message": "ユーザー名が必要です。"}
 
     try:
-        # UPSERT 用のデータを作成
-        records = [
-            {
-                "event_id": data.event_id,
-                "username": data.username,
-                "slot_id": w.slot_id,
-                "wish_level": w.wish_level
-            }
-            for w in data.wishes
+        # 古い希望データをクリアして再登録
+        supabase.table("practice_wishes").delete().eq("username", username).execute()
+
+        insert_data = [
+            {"username": username, "slot_id": w["slot_id"], "wish_level": w["wish_level"]}
+            for w in wishes
         ]
+        if insert_data:
+            supabase.table("practice_wishes").insert(insert_data).execute()
 
-        # 既存データを一括更新 (ON CONFLICT ON (username, slot_id) DO UPDATE)
-        supabase.table("practice_wishes").upsert(
-            records,
-            on_conflict="username,slot_id"
-        ).execute()
-
-        return {"success": True, "message": "希望を正常に保存しました"}
-
+        return {"success": True, "message": "練習希望を保存しました！"}
     except Exception as e:
-        print(f"Database error: {e}")
-        return {"success": False, "message": f"希望の保存中にエラーが発生しました: {str(e)}"}
+        print(f"Submit Wishes Error: {e}")
+        return {"success": False, "message": f"保存エラー: {str(e)}"}
 
 # 15. 部員：自分が提出済みの希望一覧取得 API
 @app.get("/api/get-user-wishes/{event_id}/{username}")
