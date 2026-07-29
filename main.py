@@ -967,16 +967,34 @@ async def get_band_members_wishes(band_id: int):
 @app.post("/api/admin/calculate-assignments-draft")
 async def calculate_assignments_draft():
     try:
-        # ここに割り当てロジック（例: 希望データを集計してバンドを充当）
-        # 例として計算結果のリスト [{ "slot_id": 1, "band_id": 5 }, ...] を作成
-        
-        # 簡易実装例: 
-        calculated_assignments = [] 
-        # (ロジックに応じて calculated_assignments を作成)
+        # 1. Supabaseから必要データをすべて一括取得
+        slots_res = supabase.table("practice_slots").select("*").execute()
+        bands_res = supabase.table("bands").select("*").execute()
+        members_res = supabase.table("band_members").select("*").execute()
+        wishes_res = supabase.table("practice_wishes").select("*").execute()
 
-        return {"success": True, "assignments": calculated_assignments}
+        event_slots = slots_res.data or []
+        bands = bands_res.data or []
+        band_members = members_res.data or []
+        all_wishes = wishes_res.data or []
+
+        # 2. ロジック関数を呼び出して割り当て計算を実行！
+        calculated_assignments = calculate_band_assignments(
+            event_slots=event_slots,
+            bands=bands,
+            band_members=band_members,
+            all_wishes=all_wishes
+        )
+
+        # 3. 計算されたドラフト割当案をフロントエンドに返す（まだDBには保存しない）
+        return {
+            "success": True, 
+            "assignments": calculated_assignments
+        }
+
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        print(f"Draft Calculation Error: {e}")
+        return {"success": False, "message": f"計算処理中にエラーが発生しました: {str(e)}"}
 
 # 2. 割当の一括確定API（DBに一括保存して全体公開）
 @app.post("/api/admin/confirm-assignments")
