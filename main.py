@@ -1000,9 +1000,10 @@ async def calculate_assignments_draft():
 @app.post("/api/admin/confirm-assignments")
 async def confirm_assignments(req: ConfirmAssignmentsRequest):
     try:
-        # 既存の割当を全削除して一括更新、または upsert
+        # 1. 一旦、既存の確定割り当てデータを全削除（または適切な初期化）
         supabase.table("practice_assignments").delete().neq("slot_id", 0).execute()
 
+        # 2. band_id が存在する（割り当てられている）データのみ抽出して保存
         new_records = [
             {"slot_id": item.slot_id, "band_id": item.band_id}
             for item in req.assignments if item.band_id is not None
@@ -1012,6 +1013,7 @@ async def confirm_assignments(req: ConfirmAssignmentsRequest):
             supabase.table("practice_assignments").insert(new_records).execute()
 
         return {"success": True, "message": "確定保存完了"}
+
     except Exception as e:
         print(f"Confirm Assignments Error: {e}")
         return {"success": False, "message": str(e)}
