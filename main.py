@@ -998,32 +998,52 @@ async def calculate_assignments_draft():
         return {"success": False, "message": f"計算処理中にエラーが発生しました: {str(e)}"}
 
 # 2. 割当の一括確定API（DBに一括保存して全体公開）
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import traceback
+
 @app.post("/api/admin/confirm-assignments")
-async def confirm_assignments(req: ConfirmAssignmentsRequest = Body(...)):
+async def confirm_assignments(request: Request):
     try:
-        print("RECEIVED PAYLOAD:", req.assignments) # ログ出力
+        # リクエスト JSON を生データとして取得
+        body = await request.json()
+        print("RECEIVED BODY:", body)
 
-        # 1. 保存対象（band_id が指定されている有効な割当）のみ抽出
-        new_records = [
-            {"slot_id": item.slot_id, "band_id": item.band_id}
-            for item in req.assignments if item.band_id is not None
-        ]
+        assignments = body.get("assignments", [])
 
-        # 2. 既存の割り当てを安全に全削除
-        # neq("slot_id", -999999) など、実在しない条件を使うことで全件削除を安全に実行
+        # 1. 保存対象のデータ（band_id が入っているもの）を整形
+        new_records = []
+        for item in assignments:
+            s_id = item.get("slot_id")
+            b_id = item.get("band_id")
+
+            if s_id is not None and b_id is not None:
+                new_records.append({
+                    "slot_id": int(s_id),
+                    "band_id": int(b_id)
+                })
+
+        # 2. 既存の割り当てを一度全削除
+        # eq ではなく delete().neq("slot_id", -99999) 等で全削除
         try:
-            supabase.table("practice_assignments").delete().neq("slot_id", -999999).execute()
+            supabase.table("practice_assignments").delete().neq("slot_id", -99999).execute()
         except Exception as del_err:
-            print(f"Delete Notice: {del_err}")
+            print("Delete error (Ignored):", del_err)
 
-        # 3. 新しい割り当てデータを一括挿入（INSERT）
+        # 3. 新しい割当を保存
         if new_records:
-            insert_res = supabase.table("practice_assignments").insert(new_records).execute()
-            print("INSERT SUCCESS:", insert_res)
+            supabase.table("practice_assignments").insert(new_records).execute()
 
-        return {"success": True, "message": "確定保存完了"}
+        return JSONResponse(content={"success": True, "message": "確定保存完了"})
 
     except Exception as e:
-        print(f"CRITICAL ERROR in confirm_assignments: {e}")
-        # 例外が発生しても 200 OK でJSONエラーメッセージを返し、CORS切断を防ぐ
-        return {"success": False, "message": f"サーバー内部エラー: {str(e)}"}
+        # 発生したエラーとトレースバック（スタックトレース）を出力
+        error_msg = str(e)
+        stack_trace = traceback.format_exc()
+        print(f"CRITICAL ERROR in confirm_assignments:\n{stack_trace}")
+
+        # 500 で落とさず、エラー内容をフロントエンドに 200 で返してダイアログ表示させる
+        return JSONResponse(
+            status_code=200,
+            content={"success": False, "message": f"DB/サーバーエラー: {error_msg}"}
+        )
