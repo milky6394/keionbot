@@ -962,3 +962,38 @@ async def get_band_members_wishes(band_id: int):
     except Exception as e:
         print(f"Get Band Members Wishes Error: {e}")
         return {"success": False, "message": str(e)}
+
+# 1. 自動割当案の試算API（DBは更新せず結果だけ返す）
+@app.post("/api/admin/calculate-assignments-draft")
+async def calculate_assignments_draft():
+    try:
+        # ここに割り当てロジック（例: 希望データを集計してバンドを充当）
+        # 例として計算結果のリスト [{ "slot_id": 1, "band_id": 5 }, ...] を作成
+        
+        # 簡易実装例: 
+        calculated_assignments = [] 
+        # (ロジックに応じて calculated_assignments を作成)
+
+        return {"success": True, "assignments": calculated_assignments}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+# 2. 割当の一括確定API（DBに一括保存して全体公開）
+@app.post("/api/admin/confirm-assignments")
+async def confirm_assignments(req: ConfirmAssignmentsRequest):
+    try:
+        # 既存の割当を全削除して一括更新、または upsert
+        supabase.table("practice_assignments").delete().neq("slot_id", 0).execute()
+
+        new_records = [
+            {"slot_id": item.slot_id, "band_id": item.band_id}
+            for item in req.assignments if item.band_id is not None
+        ]
+
+        if new_records:
+            supabase.table("practice_assignments").insert(new_records).execute()
+
+        return {"success": True, "message": "確定保存完了"}
+    except Exception as e:
+        print(f"Confirm Assignments Error: {e}")
+        return {"success": False, "message": str(e)}

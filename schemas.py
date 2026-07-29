@@ -90,3 +90,10 @@ class WishSubmitRequest(BaseModel):
 # --- 割り当て計算・保存用 ---
 class CalculateAssignmentRequest(BaseModel):
     event_id: int
+
+class AssignmentItem(BaseModel):
+    slot_id: int
+    band_id: Optional[int] = None
+
+class ConfirmAssignmentsRequest(BaseModel):
+    assignments: List[AssignmentItem]
