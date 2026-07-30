@@ -39,7 +39,8 @@ class DeleteAccountRequest(BaseModel):
 # 1. メンバー単体の定義（こちらを上に置く）
 class BandMemberItem(BaseModel):
     username: str
-    instrument: str
+    instrument: Optional[str] = None  # ★ DB用の instrument を追加
+    part: Optional[str] = None        # ★ 既存の part も受け取れるように残す
 
 # 2. バンド全体の定義（上で定義した BandMemberItem を使う）
 class BandRegisterRequest(BaseModel):

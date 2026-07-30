@@ -248,15 +248,20 @@ def register_band(req: BandRegisterRequest):
 
         created_band_id = band_res.data[0]["id"]
 
-        # 3. band_members テーブルにメンバー＆パート情報をまとめて一括登録
-        member_records = [
-            {
+# 3. band_members テーブルにメンバー＆パート情報をまとめて一括登録
+        member_records = []
+        for m in req.members:
+            if not m.username.strip():
+                continue
+            
+            # フロントから送られてきた instrument または part から値を取得
+            inst = getattr(m, 'instrument', None) or getattr(m, 'part', '') or ''
+            
+            member_records.append({
                 "band_id": created_band_id,
                 "username": m.username.strip(),
-                "instrument": m.instrument.strip()
-            }
-            for m in req.members if m.username.strip()
-        ]
+                "part": inst.strip()  # ★ DB(band_members)のカラム名である 'part' に設定！
+            })
 
         if member_records:
             supabase.table("band_members").insert(member_records).execute()
