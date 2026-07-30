@@ -327,22 +327,33 @@ def get_band_detail(band_id: int):
 
         # 該当バンドのメンバー取得
         members_res = supabase.table("band_members").select("*").eq("band_id", band_id).execute()
-        members = members_res.data if members_res.data else []
+        raw_members = members_res.data if members_res.data else []
+
+        # JS側が 'part' または 'instrument' のどちらでも受け取れるように整形
+        formatted_members = []
+        for m in raw_members:
+            # instrument または part の値を安全に取得
+            inst = m.get("instrument") or m.get("part") or ""
+            formatted_members.append({
+                "username": m.get("username", ""),
+                "instrument": inst,
+                "part": inst  # 両方のキーを持たせておくとJS側でパースエラーを防げます
+            })
 
         return {
             "success": True,
             "band": {
                 "id": band["id"],
                 "band_name": band["band_name"],
-                "members": members
+                "members": formatted_members
             }
         }
     except Exception as e:
-        print(f"Database error: {e}")
+        print(f"Database error in get_band_detail: {e}")
         return {"success": False, "message": "バンド情報の取得に失敗しました"}
 
 
-# 10. バンド更新 API
+# 10. バンド更新 API（部員名簿 members の自動更新処理付き）
 @app.post("/api/update-band")
 def update_band(data: BandUpdateRequest):
     if not supabase:
@@ -353,16 +364,16 @@ def update_band(data: BandUpdateRequest):
         supabase.table("bands").update({"band_name": data.band_name}).eq("id", data.band_id).execute()
 
         # 2. 既存のメンバー構成を一度クリア
-        # ※ テーブル名が band_members の場合（members の場合は "members" に変更してください）
         supabase.table("band_members").delete().eq("band_id", data.band_id).execute()
 
-        # 3. 新しいメンバー構成を登録
+        # 3. 新しいメンバー構成を band_members に登録
         new_members = [
             {
                 "band_id": data.band_id,
-                "band": data.band_name,     # カラム名が 'band' の場合（バンド名またはIDを挿入）
+                "band": data.band_name,
                 "username": m.username,
-                "instrument": m.instrument  # 'part' ではなく 'instrument' を指定
+                # Pydanticモデルが instrument / part のどちらで受けていても拾えるように対応
+                "instrument": getattr(m, "instrument", None) or getattr(m, "part", "")
             }
             for m in data.members
         ]
@@ -370,10 +381,55 @@ def update_band(data: BandUpdateRequest):
         if new_members:
             supabase.table("band_members").insert(new_members).execute()
 
-        return {"success": True, "message": "バンド情報を更新しました！"}
+        # -------------------------------------------------------------
+        # ★ 4. members テーブル（部員名簿）の所属バンド・担当楽器を自動更新 ★
+        # -------------------------------------------------------------
+        # 登録された全 band_members から各部員の最新情報をまとめて集計
+        all_bm_res = supabase.table("band_members").select("*").execute()
+        all_bm = all_bm_res.data if all_bm_res.data else []
+
+        # ユーザーごとにバンドリストと楽器リストを整理
+        user_bands_map = {}
+        user_inst_map = {}
+
+        for row in all_bm:
+            uname = row.get("username")
+            b_name = row.get("band") or ""
+            inst_str = row.get("instrument") or row.get("part") or ""
+
+            if not uname:
+                continue
+
+            if uname not in user_bands_map:
+                user_bands_map[uname] = []
+                user_inst_map[uname] = []
+
+            # 所属バンドを追加（重複なし）
+            if b_name and b_name not in user_bands_map[uname]:
+                user_bands_map[uname].append(b_name)
+
+            # 担当楽器を分解して追加（重複なし）
+            parts = inst_str.strip().split()
+            for p in parts:
+                if p and p not in user_inst_map[uname]:
+                    user_inst_map[uname].append(p)
+
+        # 今回更新に関わったメンバーの members テーブルを UPDATE
+        for m in data.members:
+            uname = m.username
+            bands_str = ", ".join(user_bands_map.get(uname, []))
+            # 担当楽器を半角スペース区切りで結合（例: "Gt Vo"）
+            inst_str = " ".join(user_inst_map.get(uname, []))
+
+            supabase.table("members").update({
+                "band": bands_str,         # 部員名簿の所属バンド項目
+                "instrument": inst_str     # 部員名簿の担当楽器項目（半角スペース区切り）
+            }).eq("username", uname).execute()
+
+        return {"success": True, "message": "バンド情報と部員名簿を更新しました！"}
 
     except Exception as e:
-        print(f"Database error: {e}")
+        print(f"Database error in update_band: {e}")
         return {"success": False, "message": "バンド情報の更新に失敗しました"}
 
 # 11. バンド削除 API
