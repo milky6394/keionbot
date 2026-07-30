@@ -51,12 +51,16 @@ class MemberUpdateItem(BaseModel):
     username: str
     part: str
 
+class BandMemberData(BaseModel):
+    username: str
+    instrument: Optional[str] = None
+    part: Optional[str] = None
+
 # バンド編集リクエストボディ
 class BandUpdateRequest(BaseModel):
     band_id: int
     band_name: str
-    members: List[MemberUpdateItem]
-    instrument: str
+    members: List[BandMemberData]
 
 class BandDeleteRequest(BaseModel):
     band_id: int
