@@ -56,6 +56,7 @@ class BandUpdateRequest(BaseModel):
     band_id: int
     band_name: str
     members: List[MemberUpdateItem]
+    instrument: str
 
 class BandDeleteRequest(BaseModel):
     band_id: int

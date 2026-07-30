@@ -353,14 +353,16 @@ def update_band(data: BandUpdateRequest):
         supabase.table("bands").update({"band_name": data.band_name}).eq("id", data.band_id).execute()
 
         # 2. 既存のメンバー構成を一度クリア
+        # ※ テーブル名が band_members の場合（members の場合は "members" に変更してください）
         supabase.table("band_members").delete().eq("band_id", data.band_id).execute()
 
         # 3. 新しいメンバー構成を登録
         new_members = [
             {
                 "band_id": data.band_id,
+                "band": data.band_name,     # カラム名が 'band' の場合（バンド名またはIDを挿入）
                 "username": m.username,
-                "part": m.part
+                "instrument": m.instrument  # 'part' ではなく 'instrument' を指定
             }
             for m in data.members
         ]
