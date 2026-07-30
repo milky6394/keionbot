@@ -105,6 +105,5 @@ class ConfirmAssignmentsRequest(BaseModel):
 class AdminUserUpdateRequest(BaseModel):
     username: str
     grade: Optional[int] = None
-    role: Optional[str] = None
     email: Optional[str] = None
     instrument: Optional[str] = None

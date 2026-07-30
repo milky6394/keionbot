@@ -1104,14 +1104,15 @@ async def confirm_assignments(request: Request):
             content={"success": False, "message": f"DB/サーバーエラー: {error_msg}"}
         )
 
+# 1. 全ユーザー一覧取得 API（管理者用）
 @app.get("/api/admin/users")
 def get_admin_users():
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # パスワードハッシュなどの機密情報を除外して取得
-        res = supabase.table("members").select("id, username, grade, role, email, band, instrument, created_at").execute()
+        # role カラムを除外して取得
+        res = supabase.table("members").select("id, username, grade, email, band, instrument, created_at").execute()
         users = res.data if res.data else []
         return {"success": True, "users": users}
     except Exception as e:
@@ -1146,8 +1147,6 @@ def update_user_by_admin(data: AdminUserUpdateRequest):
         update_data = {}
         if data.grade is not None:
             update_data["grade"] = data.grade
-        if data.role is not None:
-            update_data["role"] = data.role
         if data.email is not None:
             update_data["email"] = data.email
         if data.instrument is not None:
