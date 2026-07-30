@@ -1103,3 +1103,61 @@ async def confirm_assignments(request: Request):
             status_code=200,
             content={"success": False, "message": f"DB/サーバーエラー: {error_msg}"}
         )
+
+@app.get("/api/admin/users")
+def get_admin_users():
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # パスワードハッシュなどの機密情報を除外して取得
+        res = supabase.table("members").select("id, username, grade, role, email, band, instrument, created_at").execute()
+        users = res.data if res.data else []
+        return {"success": True, "users": users}
+    except Exception as e:
+        print(f"Error fetching users for admin: {e}")
+        return {"success": False, "message": "ユーザー一覧の取得に失敗しました"}
+
+# 2. ユーザー強制削除 API（管理者用）
+@app.delete("/api/admin/users/{username}")
+def delete_user_by_admin(username: str):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        # 関連テーブル（band_members）からの削除も合わせて実行
+        supabase.table("band_members").delete().eq("username", username).execute()
+        
+        # members テーブルから削除
+        res = supabase.table("members").delete().eq("username", username).execute()
+        
+        return {"success": True, "message": f"ユーザー '{username}' を削除しました"}
+    except Exception as e:
+        print(f"Error deleting user {username}: {e}")
+        return {"success": False, "message": "ユーザーの削除に失敗しました"}
+
+# 3. ユーザー情報更新 API（管理者用）
+@app.post("/api/admin/users/update")
+def update_user_by_admin(data: AdminUserUpdateRequest):
+    if not supabase:
+        return {"success": False, "message": "データベース接続エラー"}
+
+    try:
+        update_data = {}
+        if data.grade is not None:
+            update_data["grade"] = data.grade
+        if data.role is not None:
+            update_data["role"] = data.role
+        if data.email is not None:
+            update_data["email"] = data.email
+        if data.instrument is not None:
+            update_data["instrument"] = data.instrument
+
+        if not update_data:
+            return {"success": False, "message": "更新対象のデータがありません"}
+
+        supabase.table("members").update(update_data).eq("username", data.username).execute()
+        return {"success": True, "message": f"ユーザー '{data.username}' の情報を更新しました"}
+    except Exception as e:
+        print(f"Error updating user {data.username}: {e}")
+        return {"success": False, "message": "ユーザー情報の更新に失敗しました"}

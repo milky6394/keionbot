@@ -101,3 +101,10 @@ class AssignmentItem(BaseModel):
 
 class ConfirmAssignmentsRequest(BaseModel):
     assignments: List[AssignmentItem]
+
+class AdminUserUpdateRequest(BaseModel):
+    username: str
+    grade: Optional[int] = None
+    role: Optional[str] = None
+    email: Optional[str] = None
+    instrument: Optional[str] = None
