@@ -1111,8 +1111,8 @@ def get_admin_users():
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # email と role を除外して、確実に存在するカラムのみ取得
-        res = supabase.table("members").select("id, username, grade, band, instrument, created_at").execute()
+        # "*" を指定して members テーブルの全カラムを取得する
+        res = supabase.table("members").select("*").execute()
         users = res.data if res.data else []
         return {"success": True, "users": users}
     except Exception as e:
