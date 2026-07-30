@@ -354,6 +354,8 @@ def get_band_detail(band_id: int):
 
 
 # 10. バンド更新 API（部員名簿 members の自動更新処理付き）
+@app.get("/api/get-band/{band_id}") # 上の9番はそのまま
+
 @app.post("/api/update-band")
 def update_band(data: BandUpdateRequest):
     if not supabase:
@@ -367,16 +369,17 @@ def update_band(data: BandUpdateRequest):
         supabase.table("band_members").delete().eq("band_id", data.band_id).execute()
 
         # 3. 新しいメンバー構成を band_members に登録
-        new_members = [
-            {
+        # ※ band_members テーブルには 'band' カラムが無いため除外
+        # ※ カラム名は 'part'
+        new_members = []
+        for m in data.members:
+            # instrument または part から値を取得
+            inst_val = getattr(m, "instrument", None) or getattr(m, "part", "")
+            new_members.append({
                 "band_id": data.band_id,
-                "band": data.band_name,
                 "username": m.username,
-                # Pydanticモデルが instrument / part のどちらで受けていても拾えるように対応
-                "instrument": getattr(m, "instrument", None) or getattr(m, "part", "")
-            }
-            for m in data.members
-        ]
+                "part": inst_val
+            })
 
         if new_members:
             supabase.table("band_members").insert(new_members).execute()
@@ -384,18 +387,22 @@ def update_band(data: BandUpdateRequest):
         # -------------------------------------------------------------
         # ★ 4. members テーブル（部員名簿）の所属バンド・担当楽器を自動更新 ★
         # -------------------------------------------------------------
-        # 登録された全 band_members から各部員の最新情報をまとめて集計
+        # 1. バンドIDからバンド名のマッピングを作成
+        bands_res = supabase.table("bands").select("id, band_name").execute()
+        band_name_map = {b["id"]: b["band_name"] for b in (bands_res.data or [])}
+
+        # 2. 全 band_members を取得して部員ごとの所属バンド・担当楽器を集計
         all_bm_res = supabase.table("band_members").select("*").execute()
         all_bm = all_bm_res.data if all_bm_res.data else []
 
-        # ユーザーごとにバンドリストと楽器リストを整理
         user_bands_map = {}
         user_inst_map = {}
 
         for row in all_bm:
             uname = row.get("username")
-            b_name = row.get("band") or ""
-            inst_str = row.get("instrument") or row.get("part") or ""
+            b_id = row.get("band_id")
+            b_name = band_name_map.get(b_id, "")
+            inst_str = row.get("part") or row.get("instrument") or ""
 
             if not uname:
                 continue
@@ -414,11 +421,10 @@ def update_band(data: BandUpdateRequest):
                 if p and p not in user_inst_map[uname]:
                     user_inst_map[uname].append(p)
 
-        # 今回更新に関わったメンバーの members テーブルを UPDATE
+        # 3. 今回更新に関わったメンバーの members テーブルを UPDATE
         for m in data.members:
             uname = m.username
             bands_str = ", ".join(user_bands_map.get(uname, []))
-            # 担当楽器を半角スペース区切りで結合（例: "Gt Vo"）
             inst_str = " ".join(user_inst_map.get(uname, []))
 
             supabase.table("members").update({
@@ -430,7 +436,7 @@ def update_band(data: BandUpdateRequest):
 
     except Exception as e:
         print(f"Database error in update_band: {e}")
-        return {"success": False, "message": "バンド情報の更新に失敗しました"}
+        return {"success": False, "message": f"バンド情報の更新に失敗しました: {str(e)}"}
 
 # 11. バンド削除 API
 @app.post("/api/delete-band")
