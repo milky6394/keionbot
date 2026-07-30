@@ -253,7 +253,7 @@ def register_band(req: BandRegisterRequest):
             {
                 "band_id": created_band_id,
                 "username": m.username.strip(),
-                "part": m.part.strip()
+                "instrument": m.instrument.strip()
             }
             for m in req.members if m.username.strip()
         ]
