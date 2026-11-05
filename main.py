@@ -340,6 +340,7 @@ def get_bands():
             result.append({
                 "id": band["id"],
                 "band_name": band["band_name"],
+                "current_songs": band.get("current_songs") or "",
                 "created_at": band.get("created_at"),
                 "members": b_members
             })
