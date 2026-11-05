@@ -275,7 +275,10 @@ def register_band(req: BandRegisterRequest):
             return {"success": False, "message": "そのバンド名は既に登録されています"}
 
         # 2. bands テーブルにバンドを作成
-        band_res = supabase.table("bands").insert({"band_name": band_name}).execute()
+        band_res = supabase.table("bands").insert({
+            "band_name": band_name,
+            "current_songs": (req.current_songs or "").strip()
+        }).execute()
         if not band_res.data:
             return {"success": False, "message": "バンドの作成に失敗しました"}
 
@@ -384,6 +387,7 @@ def get_band_detail(band_id: int):
             "band": {
                 "id": band["id"],
                 "band_name": band["band_name"],
+                "current_songs": band.get("current_songs") or "",
                 "members": formatted_members
             }
         }
@@ -401,8 +405,11 @@ def update_band(data: BandUpdateRequest):
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
-        # 1. バンド名の更新
-        supabase.table("bands").update({"band_name": data.band_name}).eq("id", data.band_id).execute()
+        # 1. バンド情報の更新
+        band_updates = {"band_name": data.band_name.strip()}
+        if data.current_songs is not None:
+            band_updates["current_songs"] = data.current_songs.strip()
+        supabase.table("bands").update(band_updates).eq("id", data.band_id).execute()
 
         # 2. 既存のメンバー構成を一度クリア
         supabase.table("band_members").delete().eq("band_id", data.band_id).execute()

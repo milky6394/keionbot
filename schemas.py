@@ -47,6 +47,7 @@ class BandMemberItem(BaseModel):
 # 2. バンド全体の定義（上で定義した BandMemberItem を使う）
 class BandRegisterRequest(BaseModel):
     band_name: str
+    current_songs: Optional[str] = None
     members: List[BandMemberItem]
 
 # バンド編集用のメンバー構造
@@ -63,6 +64,7 @@ class BandMemberData(BaseModel):
 class BandUpdateRequest(BaseModel):
     band_id: int
     band_name: str
+    current_songs: Optional[str] = None
     members: List[BandMemberData]
 
 class BandDeleteRequest(BaseModel):
