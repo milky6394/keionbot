@@ -15,6 +15,7 @@ from schemas import (
     BandRegisterRequest,
     BandUpdateRequest,
     BandDeleteRequest,
+    AdminUserUpdateRequest,
 )
 
 # --------------------------------------------------
@@ -215,6 +216,38 @@ def delete_account(req: DeleteAccountRequest):
     except Exception as e:
         print(f"Database delete error: {e}")
         return {"success": False, "message": "削除処理中にエラーが発生しました"}
+def sync_member_band_details(usernames: set[str]) -> None:
+    if not usernames:
+        return
+
+    bands_res = supabase.table("bands").select("id, band_name").execute()
+    band_name_map = {band["id"]: band["band_name"] for band in (bands_res.data or [])}
+
+    members_res = supabase.table("band_members").select("*").execute()
+    user_bands_map = {username: [] for username in usernames}
+    user_instruments_map = {username: [] for username in usernames}
+
+    for row in (members_res.data or []):
+        username = row.get("username")
+        if username not in usernames:
+            continue
+
+        band_name = band_name_map.get(row.get("band_id"), "")
+        if band_name and band_name not in user_bands_map[username]:
+            user_bands_map[username].append(band_name)
+
+        instrument = str(row.get("part") or row.get("instrument") or "").strip()
+        for part in instrument.split():
+            if part not in user_instruments_map[username]:
+                user_instruments_map[username].append(part)
+
+    for username in usernames:
+        supabase.table("members").update({
+            "band": ", ".join(user_bands_map[username]),
+            "instrument": " ".join(user_instruments_map[username])
+        }).eq("username", username).execute()
+
+
 # 7. バンド新規登録 API
 @app.post("/api/register-band")
 def register_band(req: BandRegisterRequest):
@@ -259,6 +292,7 @@ def register_band(req: BandRegisterRequest):
 
         if member_records:
             supabase.table("band_members").insert(member_records).execute()
+            sync_member_band_details({member["username"] for member in member_records})
 
         return {
             "success": True,
@@ -383,53 +417,7 @@ def update_band(data: BandUpdateRequest):
         if new_members:
             supabase.table("band_members").insert(new_members).execute()
 
-        # -------------------------------------------------------------
-        # ★ 4. members テーブル（部員名簿）の所属バンド・担当楽器を自動更新 ★
-        # -------------------------------------------------------------
-        # 1. バンドIDからバンド名のマッピングを作成
-        bands_res = supabase.table("bands").select("id, band_name").execute()
-        band_name_map = {b["id"]: b["band_name"] for b in (bands_res.data or [])}
-
-        # 2. 全 band_members を取得して部員ごとの所属バンド・担当楽器を集計
-        all_bm_res = supabase.table("band_members").select("*").execute()
-        all_bm = all_bm_res.data if all_bm_res.data else []
-
-        user_bands_map = {}
-        user_inst_map = {}
-
-        for row in all_bm:
-            uname = row.get("username")
-            b_id = row.get("band_id")
-            b_name = band_name_map.get(b_id, "")
-            inst_str = row.get("part") or row.get("instrument") or ""
-
-            if not uname:
-                continue
-
-            if uname not in user_bands_map:
-                user_bands_map[uname] = []
-                user_inst_map[uname] = []
-
-            # 所属バンドを追加（重複なし）
-            if b_name and b_name not in user_bands_map[uname]:
-                user_bands_map[uname].append(b_name)
-
-            # 担当楽器を分解して追加（重複なし）
-            parts = inst_str.strip().split()
-            for p in parts:
-                if p and p not in user_inst_map[uname]:
-                    user_inst_map[uname].append(p)
-
-        # 3. 今回更新に関わったメンバーの members テーブルを UPDATE
-        for m in data.members:
-            uname = m.username
-            bands_str = ", ".join(user_bands_map.get(uname, []))
-            inst_str = " ".join(user_inst_map.get(uname, []))
-
-            supabase.table("members").update({
-                "band": bands_str,         # 部員名簿の所属バンド項目
-                "instrument": inst_str     # 部員名簿の担当楽器項目（半角スペース区切り）
-            }).eq("username", uname).execute()
+        sync_member_band_details({member.username for member in data.members})
 
         return {"success": True, "message": "バンド情報と部員名簿を更新しました！"}
 
