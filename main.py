@@ -89,6 +89,8 @@ def check_member(req: MemberCheckRequest):
 def register_member(req: RegisterRequest):
     if not req.username.strip():
         return {"success": False, "message": "名前を入力してください"}
+    if not req.furigana.strip():
+        return {"success": False, "message": "フリガナを入力してください"}
 
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
@@ -96,6 +98,7 @@ def register_member(req: RegisterRequest):
     try:
         new_data = {
             "username": req.username.strip(),
+            "furigana": req.furigana.strip(),
             "grade": req.grade,
             "class": req.member_class.strip(),
             "course": req.course.strip(),
@@ -129,12 +132,15 @@ def update_member(req: UpdateMemberRequest):
 
     if not username:
         return {"success": False, "message": "ユーザー名が不整合です"}
+    if not req.furigana.strip():
+        return {"success": False, "message": "フリガナを入力してください"}
 
     if not supabase:
         return {"success": False, "message": "データベース接続エラー"}
 
     try:
         updated_data = {
+            "furigana": req.furigana.strip(),
             "grade": req.grade,
             "class": req.member_class.strip(),
             "course": req.course.strip(),

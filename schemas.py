@@ -9,6 +9,7 @@ class MemberCheckRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     username: str
+    furigana: str
     grade: int
     member_class: str
     course: str
@@ -22,6 +23,7 @@ class RegisterRequest(BaseModel):
 
 class UpdateMemberRequest(BaseModel):
     username: str
+    furigana: str
     grade: int
     member_class: str
     course: str
